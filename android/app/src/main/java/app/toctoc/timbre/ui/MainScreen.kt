@@ -157,6 +157,37 @@ fun MainScreen(
                 }
             }
 
+            // ---- Recibir en otro teléfono (iPhone / sin la app) ----
+            SectionCard(title = "Recibir en otro teléfono", icon = Icons.Filled.PhoneIphone) {
+                Text(
+                    "¿Querés recibir el timbre en un iPhone u otro teléfono sin instalar " +
+                        "TocToc? Compartí este enlace: explica cómo recibirlo con la app " +
+                        "gratuita ntfy (incluye un QR).",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                val recibir = vm.recibirUrl(settings)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { shareText(context, recibir) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.Share, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Compartir")
+                    }
+                    OutlinedButton(
+                        onClick = { openUrl(context, recibir) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.QrCode2, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ver / QR")
+                    }
+                }
+            }
+
             // ---- Actualizaciones ----
             SectionCard(title = "Actualizaciones", icon = Icons.Filled.SystemUpdate) {
                 Text(
@@ -347,4 +378,10 @@ private fun shareText(context: Context, text: String) {
         putExtra(Intent.EXTRA_TEXT, text)
     }
     context.startActivity(Intent.createChooser(intent, "Compartir enlace"))
+}
+
+private fun openUrl(context: Context, url: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    } catch (_: Exception) {}
 }

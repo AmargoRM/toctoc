@@ -27,4 +27,17 @@ object Links {
             .build()
             .toString()
     }
+
+    /**
+     * URL de la página para recibir el timbre en OTRO teléfono (iPhone) usando
+     * la app oficial de ntfy. Se comparte con quien quiera recibir los avisos.
+     */
+    fun recibirUrl(server: String, topic: String, doorbellName: String): String {
+        return Uri.parse(BuildConfig.RECIBIR_PAGE_BASE).buildUpon()
+            .appendQueryParameter("t", topic)
+            .appendQueryParameter("s", server.trimEnd('/'))
+            .appendQueryParameter("n", doorbellName)
+            .build()
+            .toString()
+    }
 }

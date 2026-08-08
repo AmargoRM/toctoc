@@ -93,7 +93,7 @@ se implementa como "una firma propia y estable, no la de Play".
 1. Descargás **una vez** el primer `toctoc.apk` (desde el Release) y lo instalás.
 2. A partir de ahí, en la pantalla **Actualizaciones** tocás *Buscar
    actualización*. La app lee
-   `https://github.com/AmargoRM/Quiniela/releases/latest/download/latest.json`,
+   `https://github.com/AmargoRM/toctoc/releases/latest/download/latest.json`,
    compara el `versionCode` y, si hay una versión nueva, **descarga e instala**
    el APK con el instalador del sistema.
 
@@ -151,7 +151,7 @@ timbre/index.html                  # página web del timbre (GitHub Pages)
 ## Puesta en marcha (checklist)
 
 1. **GitHub Pages**: activalo en *Settings → Pages* (rama `main`, carpeta raíz).
-   Así la página `…/quiniela/timbre/` queda pública (necesaria para el tap NFC).
+   Así la página `…/toctoc/timbre/` queda pública (necesaria para el tap NFC).
 2. **Repo público**: los assets del Release deben ser descargables sin login.
 3. Corré el workflow **Build TocToc APK** y descargá `toctoc.apk` del Release.
 4. Instalalo, poné un nombre al timbre, activá el switch, tocá **Grabar etiqueta**
