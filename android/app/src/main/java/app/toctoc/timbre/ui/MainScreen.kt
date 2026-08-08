@@ -188,6 +188,37 @@ fun MainScreen(
                 }
             }
 
+            // ---- Que otros creen su propio timbre ----
+            SectionCard(title = "Invitar a crear un timbre", icon = Icons.Filled.AddCircle) {
+                Text(
+                    "¿Querés que otra persona arme su PROPIO timbre (sin depender de vos, " +
+                        "incluso desde iPhone)? Compartile esta página: genera su timbre, " +
+                        "configura el recibir y hasta graba la etiqueta.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                val crear = vm.crearUrl()
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { shareText(context, crear) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.Share, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Compartir")
+                    }
+                    OutlinedButton(
+                        onClick = { openUrl(context, crear) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Abrir")
+                    }
+                }
+            }
+
             // ---- Actualizaciones ----
             SectionCard(title = "Actualizaciones", icon = Icons.Filled.SystemUpdate) {
                 Text(

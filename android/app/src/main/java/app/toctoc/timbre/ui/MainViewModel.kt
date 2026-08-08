@@ -41,6 +41,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun recibirUrl(s: TocTocSettings): String =
         Links.recibirUrl(s.ntfyServer, s.topic, s.doorbellName)
 
+    fun crearUrl(): String = Links.crearPageUrl()
+
     fun setName(name: String) = viewModelScope.launch { repo.setName(name) }
 
     fun setServer(server: String) = viewModelScope.launch { repo.setServer(server) }

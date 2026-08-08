@@ -40,4 +40,10 @@ object Links {
             .build()
             .toString()
     }
+
+    /**
+     * Página pública "Creá tu timbre": para que CUALQUIERA arme su propio timbre
+     * (sin la app), típico iPhone. Es una URL fija, sin parámetros.
+     */
+    fun crearPageUrl(): String = BuildConfig.RING_PAGE_BASE.trimEnd('/') + "/crear/"
 }
