@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#3F51B5" />
+<title>TocToc — Creá tu timbre</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(160deg, #3F51B5, #283593);
+    color: #fff; min-height: 100%; padding: 26px 18px 52px; text-align: center;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  .bell { font-size: 58px; filter: drop-shadow(0 8px 18px rgba(0,0,0,.35)); }
+  h1 { font-size: 23px; margin: 12px 0 6px; font-weight: 800; }
+  .sub { opacity: .9; font-size: 15px; margin: 0 0 18px; }
+  .card {
+    background: rgba(255,255,255,.10); border-radius: 18px; padding: 20px;
+    margin: 14px 0; text-align: left;
+  }
+  .card h2 { font-size: 16px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+  .card p { font-size: 13.5px; opacity: .9; margin: 6px 0; }
+  .step { display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #283593;
+    font-weight: 800; font-size: 14px; flex: 0 0 auto; }
+  label { display:block; font-size: 13px; opacity:.85; margin: 10px 0 6px; }
+  input[type=text] {
+    width: 100%; padding: 13px 14px; border-radius: 12px; border: none;
+    font-size: 16px; background: #fff; color: #222;
+  }
+  .btn {
+    display: block; width: 100%; text-align: center; text-decoration: none; cursor: pointer;
+    background: #fff; color: #283593; font-weight: 800; font-size: 16px; border: none;
+    padding: 14px 18px; border-radius: 26px; margin: 12px 0 4px; box-shadow: 0 8px 22px rgba(0,0,0,.25);
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity:.6; }
+  .btn.ghost { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.55); box-shadow:none; font-size:15px; }
+  .row { display:flex; gap:10px; } .row > * { flex:1; }
+  .qrbox { background:#fff; border-radius:14px; padding:12px; display:inline-block; margin:8px auto 2px; }
+  .qrbox svg { display:block; width:190px; height:190px; }
+  .center { text-align:center; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:14px;
+    background: rgba(0,0,0,.25); padding: 10px 12px; border-radius: 10px; word-break: break-all; }
+  .muted { font-size: 12.5px; opacity: .8; }
+  .status { min-height: 20px; font-size: 14px; margin-top: 8px; }
+  .ok { color:#C8F7C5; } .err { color:#FFD2D2; }
+  .hidden { display:none; }
+  .pill { display:inline-block; background: rgba(0,0,0,.22); border-radius: 999px; padding: 4px 12px; font-size: 12.5px; margin-top: 6px; }
+  .foot { margin-top: 24px; font-size: 12px; opacity: .7; }
+  a { color:#fff; }
+  hr { border:none; border-top:1px solid rgba(255,255,255,.15); margin:14px 0; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bell">🔔</div>
+    <h1>Creá tu timbre NFC</h1>
+    <p class="sub">Sin cuenta y sin instalar nada obligatorio. Funciona en <strong>iPhone</strong> y Android.</p>
+
+    <!-- Paso inicial: crear -->
+    <div id="create" class="card hidden">
+      <h2><span class="step">1</span> Ponele un nombre</h2>
+      <p>Es para reconocer tu timbre (ej. Casa, Depto 4B, Oficina).</p>
+      <label for="name">Nombre del timbre</label>
+      <input type="text" id="name" placeholder="Mi casa" maxlength="40" />
+      <button class="btn" id="createBtn">Crear mi timbre</button>
+      <p class="muted">Se genera un identificador único y privado. Queda guardado en este teléfono.</p>
+    </div>
+
+    <!-- Panel del timbre creado -->
+    <div id="panel" class="hidden"></div>
+  </div>
+
+  <script src="qrcode.js"></script>
+  <script>
+  (function () {
+    var STORE_KEY = "toctoc_timbre_v1";
+    var SERVER = "https://ntfy.sh";
+    var ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
+
+    var elCreate = document.getElementById("create");
+    var elPanel = document.getElementById("panel");
+    var elName = document.getElementById("name");
+
+    // Base de la página del timbre (…/timbre/), relativa → sobrevive renombres del repo.
+    var ringBase = new URL("../", location.href).href;      // …/timbre/
+
+    function genTopic() {
+      var arr = new Uint32Array(14);
+      (window.crypto || window.msCrypto).getRandomValues(arr);
+      var s = "timbre-";
+      for (var i = 0; i < 12; i++) s += ALPHABET[arr[i] % ALPHABET.length];
+      return s;
+    }
+
+    function load() { try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { return null; } }
+    function save(o) { try { localStorage.setItem(STORE_KEY, JSON.stringify(o)); } catch (e) {} }
+
+    function tagUrl(t) {
+      return ringBase + "?t=" + encodeURIComponent(t.topic)
+        + "&s=" + encodeURIComponent(SERVER) + "&n=" + encodeURIComponent(t.name);
+    }
+    function subUrl(t) { return SERVER + "/" + t.topic; }
+
+    function qrSvg(data) {
+      try { var qr = qrcode(0, "M"); qr.addData(data); qr.make(); return qr.createSvgTag({ cellSize: 5, margin: 2 }); }
+      catch (e) { return '<p class="muted" style="color:#283593">QR no disponible</p>'; }
+    }
+
+    function publishTest(t) {
+      var url = subUrl(t) + "?title=" + encodeURIComponent(t.name) + "&tags=bell&priority=high";
+      return fetch(url, { method: "POST", body: "Prueba de timbre 🔔 (" + t.name + ")" });
+    }
+
+    var iosStore = "https://apps.apple.com/app/ntfy/id1625396347";
+    var androidStore = "https://play.google.com/store/apps/details?id=io.heckel.ntfy";
+    var nfcSupported = ("NDEFReader" in window);
+
+    function renderPanel(t) {
+      elCreate.classList.add("hidden");
+      elPanel.classList.remove("hidden");
+
+      var nfcBlock = nfcSupported
+        ? '<button class="btn" id="writeBtn">📶 Grabar etiqueta ahora</button>'
+          + '<div class="status center" id="writeStatus"></div>'
+          + '<p class="muted">Tocá el botón y apoyá una etiqueta NFC en blanco (NTAG213/215/216) en la parte de atrás del teléfono.</p>'
+        : '<p>Tu teléfono no permite grabar NFC desde el navegador (es un límite de iPhone). Dos opciones:</p>'
+          + '<p>• <strong>Pedí tu etiqueta ya grabada</strong> (te la entregamos lista).<br>'
+          + '• O grabala vos con una app gratis (<strong>NFC Tools</strong> o <strong>Atajos</strong> de Apple) pegando esta URL:</p>'
+          + '<div class="mono" id="tagUrlBox"></div>'
+          + '<button class="btn ghost" id="copyTag" style="margin-top:10px">Copiar URL de la etiqueta</button>';
+
+      elPanel.innerHTML =
+        '<div class="card center">'
+        + '  <div style="font-size:15px">Tu timbre: <strong id="pName"></strong></div>'
+        + '  <div class="pill">tema: <span id="pTopic" class="mono" style="background:none;padding:0"></span></div>'
+        + '</div>'
+
+        + '<div class="card">'
+        + '  <h2><span class="step">2</span> Recibí el aviso en tu teléfono</h2>'
+        + '  <p>Instalá <strong>ntfy</strong> (gratis) — es lo que suena cuando tocan tu timbre, aun bloqueado.</p>'
+        + '  <div class="row">'
+        + '    <a class="btn" href="' + iosStore + '" target="_blank" rel="noopener">🍎 iPhone</a>'
+        + '    <a class="btn" href="' + androidStore + '" target="_blank" rel="noopener">🤖 Android</a>'
+        + '  </div>'
+        + '  <hr>'
+        + '  <p>Abrí ntfy y suscribite a tu tema (o escaneá el QR):</p>'
+        + '  <a class="btn" id="openNtfy" target="_blank" rel="noopener">📲 Abrir en ntfy</a>'
+        + '  <div class="center"><div class="qrbox" id="qrSub"></div></div>'
+        + '  <p class="muted">Si te pide el nombre del tema, poné exactamente: <span class="mono" id="topicInline" style="background:none;padding:0"></span></p>'
+        + '</div>'
+
+        + '<div class="card">'
+        + '  <h2><span class="step">3</span> Tu etiqueta NFC (para la puerta)</h2>'
+        + '  <p>Cuando alguien la toque, suena tu timbre. Compartí el enlace o escaneá para verlo:</p>'
+        + '  <div class="center"><div class="qrbox" id="qrTag"></div></div>'
+        + '  ' + nfcBlock
+        + '</div>'
+
+        + '<div class="card">'
+        + '  <h2><span class="step">4</span> Probá que suene</h2>'
+        + '  <p>Primero suscribite en ntfy (paso 2). Después:</p>'
+        + '  <button class="btn ghost" id="testBtn">🔔 Enviar timbre de prueba</button>'
+        + '  <div class="status center" id="testStatus"></div>'
+        + '</div>'
+
+        + '<div class="card">'
+        + '  <button class="btn ghost" id="newBtn">Crear otro timbre distinto</button>'
+        + '  <p class="muted center">Este timbre queda guardado en este navegador. Volvé a esta página cuando quieras.</p>'
+        + '</div>';
+
+      document.getElementById("pName").textContent = t.name;
+      document.getElementById("pTopic").textContent = t.topic;
+      document.getElementById("topicInline").textContent = t.topic;
+      var openNtfy = document.getElementById("openNtfy");
+      openNtfy.href = subUrl(t);
+      document.getElementById("qrSub").innerHTML = qrSvg(subUrl(t));
+      document.getElementById("qrTag").innerHTML = qrSvg(tagUrl(t));
+
+      var tagBox = document.getElementById("tagUrlBox");
+      if (tagBox) tagBox.textContent = tagUrl(t);
+
+      // Copiar URL de la etiqueta (iPhone)
+      var copyTag = document.getElementById("copyTag");
+      if (copyTag) copyTag.addEventListener("click", function () {
+        navigator.clipboard && navigator.clipboard.writeText(tagUrl(t));
+        copyTag.textContent = "¡Copiado!";
+        setTimeout(function(){ copyTag.textContent = "Copiar URL de la etiqueta"; }, 1500);
+      });
+
+      // Grabar por Web NFC (Android Chrome)
+      var writeBtn = document.getElementById("writeBtn");
+      if (writeBtn) writeBtn.addEventListener("click", function () {
+        var st = document.getElementById("writeStatus");
+        st.className = "status center"; st.textContent = "Acercá la etiqueta al teléfono…";
+        try {
+          var writer = new NDEFReader();
+          writer.write({ records: [{ recordType: "url", data: tagUrl(t) }] })
+            .then(function () { st.className = "status center ok"; st.textContent = "✅ ¡Etiqueta grabada! Pegala en la puerta."; })
+            .catch(function (e) { st.className = "status center err"; st.textContent = "No se pudo grabar: " + e.message; });
+        } catch (e) { st.className = "status center err"; st.textContent = "Error: " + e.message; }
+      });
+
+      // Probar
+      document.getElementById("testBtn").addEventListener("click", function () {
+        var st = document.getElementById("testStatus");
+        st.className = "status center"; st.textContent = "Enviando…";
+        publishTest(t)
+          .then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            st.className = "status center ok"; st.textContent = "✅ Enviado. Fijate la notificación en ntfy.";
+          })
+          .catch(function (e) { st.className = "status center err"; st.textContent = "No se pudo enviar: " + e.message; });
+      });
+
+      // Crear otro
+      document.getElementById("newBtn").addEventListener("click", function () {
+        if (confirm("¿Crear un timbre nuevo? El actual se reemplaza en este navegador.")) {
+          localStorage.removeItem(STORE_KEY);
+          elPanel.classList.add("hidden"); elPanel.innerHTML = "";
+          elCreate.classList.remove("hidden"); elName.value = "";
+        }
+      });
+    }
+
+    // ---- init ----
+    var existing = load();
+    if (existing && existing.topic) {
+      renderPanel(existing);
+    } else {
+      elCreate.classList.remove("hidden");
+    }
+
+    document.getElementById("createBtn").addEventListener("click", function () {
+      var name = (elName.value || "").trim() || "Mi casa";
+      var t = { topic: genTopic(), name: name, server: SERVER, created: Date.now() };
+      save(t);
+      renderPanel(t);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  })();
+  </script>
+</body>
+</html>
