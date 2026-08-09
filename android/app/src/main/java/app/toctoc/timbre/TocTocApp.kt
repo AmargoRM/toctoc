@@ -39,14 +39,9 @@ class TocTocApp : Application() {
             vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
             setBypassDnd(true)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-            val attrs = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-            setSound(
-                Uri.parse("android.resource://" + packageName + "/" + R.raw.doorbell),
-                attrs
-            )
+            // Sin sonido en el canal: el tono elegido lo reproduce RingActivity
+            // (así no se duplica ni se pisa con el tono seleccionado).
+            setSound(null, null)
         }
 
         nm.createNotificationChannel(service)
@@ -55,6 +50,8 @@ class TocTocApp : Application() {
 
     companion object {
         const val CHANNEL_SERVICE = "toctoc_service"
-        const val CHANNEL_RING = "toctoc_ring"
+        // v2: canal silencioso (el tono lo pone RingActivity). Nuevo id para
+        // reemplazar el canal viejo que tenía sonido fijo.
+        const val CHANNEL_RING = "toctoc_ring2"
     }
 }

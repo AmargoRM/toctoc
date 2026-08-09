@@ -43,6 +43,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun crearUrl(): String = Links.crearPageUrl()
 
+    fun setRingtone(id: String) = viewModelScope.launch { repo.setRingtone(id) }
+
     fun setName(name: String) = viewModelScope.launch { repo.setName(name) }
 
     fun setServer(server: String) = viewModelScope.launch { repo.setServer(server) }

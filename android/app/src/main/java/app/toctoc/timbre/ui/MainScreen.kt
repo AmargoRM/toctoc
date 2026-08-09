@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.toctoc.timbre.BuildConfig
 import app.toctoc.timbre.MainActivity
+import app.toctoc.timbre.data.Ringtones
 import app.toctoc.timbre.update.UpdateState
 import kotlinx.coroutines.launch
 
@@ -43,6 +44,19 @@ fun MainScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Reproductor para escuchar una vista previa del tono
+    val previewPlayer = remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+    fun preview(res: Int) {
+        previewPlayer.value?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
+        val mp = android.media.MediaPlayer.create(context, res)
+        previewPlayer.value = mp
+        mp?.setOnCompletionListener { it.release(); previewPlayer.value = null }
+        mp?.start()
+    }
+    DisposableEffect(Unit) {
+        onDispose { previewPlayer.value?.let { try { it.release() } catch (_: Exception) {} } }
+    }
 
     LaunchedEffect(toast) {
         toast?.let { scope.launch { snackbar.showSnackbar(it) }; vm.clearToast() }
@@ -154,6 +168,31 @@ fun MainScreen(
                     Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Probar timbre")
+                }
+            }
+
+            // ---- Tono del timbre ----
+            SectionCard(title = "Tono del timbre", icon = Icons.Filled.MusicNote) {
+                Text(
+                    "Elegí cómo suena tu timbre. Tocá ▶ para escucharlo.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Ringtones.all.forEach { tone ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        RadioButton(
+                            selected = settings.ringtone == tone.id,
+                            onClick = { vm.setRingtone(tone.id) }
+                        )
+                        Text(tone.label, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { preview(tone.res) }) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "Escuchar")
+                        }
+                    }
                 }
             }
 
