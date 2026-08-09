@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
 import app.toctoc.timbre.R
 import app.toctoc.timbre.TocTocApp
+import app.toctoc.timbre.data.Ringtones
+import app.toctoc.timbre.data.SettingsRepository
 import kotlinx.coroutines.delay
 
 /**
@@ -45,12 +47,16 @@ class RingActivity : ComponentActivity() {
 
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+    private var ringtoneRes: Int = R.raw.doorbell
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showOverLockscreen()
 
         val message = intent.getStringExtra(EXTRA_MESSAGE) ?: "Alguien está en la puerta"
+        ringtoneRes = try {
+            Ringtones.resFor(SettingsRepository(applicationContext).snapshot().ringtone)
+        } catch (_: Exception) { R.raw.doorbell }
         startAlarm()
 
         setContent {
@@ -91,7 +97,7 @@ class RingActivity : ComponentActivity() {
         stopAlarm()
         // Sonido en el canal de alarma para que suene aunque el timbre esté bajo
         try {
-            val soundUri = Uri.parse("android.resource://$packageName/${R.raw.doorbell}")
+            val soundUri = Uri.parse("android.resource://$packageName/$ringtoneRes")
             player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()

@@ -80,6 +80,18 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="toctoc" android:host="ring" />
             </intent-filter>
+            <!-- App Link: si la app está instalada y el dominio está verificado
+                 (/.well-known/assetlinks.json), el enlace de la etiqueta abre la
+                 app DIRECTO en vez del navegador. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="amargorm.github.io"
+                    android:path="/toctoc/timbre/" />
+            </intent-filter>
         </activity>
 
         <!-- Servicio en primer plano que escucha los timbres -->

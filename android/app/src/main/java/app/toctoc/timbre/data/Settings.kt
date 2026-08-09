@@ -20,7 +20,8 @@ data class TocTocSettings(
     val topic: String,
     val doorbellName: String,
     val ntfyServer: String,
-    val listening: Boolean
+    val listening: Boolean,
+    val ringtone: String
 )
 
 class SettingsRepository(private val context: Context) {
@@ -30,6 +31,7 @@ class SettingsRepository(private val context: Context) {
         val NAME = stringPreferencesKey("doorbell_name")
         val SERVER = stringPreferencesKey("ntfy_server")
         val LISTENING = booleanPreferencesKey("listening")
+        val RINGTONE = stringPreferencesKey("ringtone")
     }
 
     val flow: Flow<TocTocSettings> = context.dataStore.data.map { p ->
@@ -37,7 +39,8 @@ class SettingsRepository(private val context: Context) {
             topic = p[Keys.TOPIC] ?: "",
             doorbellName = p[Keys.NAME] ?: "Mi puerta",
             ntfyServer = (p[Keys.SERVER] ?: BuildConfig.DEFAULT_NTFY_SERVER).trimEnd('/'),
-            listening = p[Keys.LISTENING] ?: false
+            listening = p[Keys.LISTENING] ?: false,
+            ringtone = p[Keys.RINGTONE] ?: Ringtones.DEFAULT_ID
         )
     }
 
@@ -60,6 +63,9 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setListening(on: Boolean) =
         context.dataStore.edit { it[Keys.LISTENING] = on }
+
+    suspend fun setRingtone(id: String) =
+        context.dataStore.edit { it[Keys.RINGTONE] = id }
 
     suspend fun regenerateTopic(): String {
         val topic = generateTopic()
