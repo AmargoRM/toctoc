@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.toctoc.timbre.data.Links
 import app.toctoc.timbre.data.Ntfy
+import app.toctoc.timbre.data.Ringtones
 import app.toctoc.timbre.data.SettingsRepository
 import app.toctoc.timbre.data.TocTocSettings
 import app.toctoc.timbre.service.RingListenerService
@@ -24,7 +25,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val settings: StateFlow<TocTocSettings> = repo.flow.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        TocTocSettings(topic = "", doorbellName = "Mi puerta", ntfyServer = "https://ntfy.sh", listening = false)
+        TocTocSettings(
+            topic = "",
+            doorbellName = "Mi puerta",
+            ntfyServer = "https://ntfy.sh",
+            listening = false,
+            ringtone = Ringtones.DEFAULT_ID
+        )
     )
 
     val updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
