@@ -12,9 +12,11 @@ import app.toctoc.timbre.service.RingListenerService
 import app.toctoc.timbre.update.UpdateInfo
 import app.toctoc.timbre.update.UpdateState
 import app.toctoc.timbre.update.Updater
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -38,8 +40,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val toast = MutableStateFlow<String?>(null)
 
     init {
-        // Asegura que exista un topic la primera vez
-        viewModelScope.launch { repo.ensureTopic() }
+        viewModelScope.launch {
+            repo.ensureTopic()
+            // Si el timbre ya estaba activo, aseguramos la suscripción FCM
+            // (tras reinstalar/actualizar el token cambia y hay que re-suscribir).
+            val s = repo.flow.first()
+            if (s.listening && s.topic.isNotBlank()) subscribeFcm(s.topic, true)
+        }
+    }
+
+    private fun subscribeFcm(topic: String, on: Boolean) {
+        try {
+            val fm = FirebaseMessaging.getInstance()
+            if (on) fm.subscribeToTopic(topic) else fm.unsubscribeFromTopic(topic)
+        } catch (_: Exception) {}
     }
 
     fun tagUrl(s: TocTocSettings): String =
@@ -57,13 +71,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setServer(server: String) = viewModelScope.launch { repo.setServer(server) }
 
     fun regenerateTopic() = viewModelScope.launch {
-        repo.regenerateTopic()
+        val old = settings.value.topic
+        val new = repo.regenerateTopic()
+        if (settings.value.listening) {
+            if (old.isNotBlank()) subscribeFcm(old, false)
+            subscribeFcm(new, true)
+        }
         toast.value = "Se generó un topic nuevo. Volvé a grabar tu etiqueta NFC."
     }
 
     fun toggleListening(on: Boolean) = viewModelScope.launch {
-        repo.ensureTopic()
+        val topic = repo.ensureTopic()
         repo.setListening(on)
+        subscribeFcm(topic, on)
         val ctx = getApplication<Application>()
         if (on) RingListenerService.start(ctx) else RingListenerService.stop(ctx)
     }
