@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
+import app.toctoc.timbre.data.Ringtones
 
 class TocTocApp : Application() {
 
@@ -27,31 +28,36 @@ class TocTocApp : Application() {
             description = "Mantiene el timbre activo en segundo plano"
             setShowBadge(false)
         }
-
-        // Canal de alta prioridad para el timbre (full-screen + sonido)
-        val ring = NotificationChannel(
-            CHANNEL_RING,
-            getString(R.string.ring_channel_name),
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "Alerta cuando alguien toca el timbre"
-            enableVibration(true)
-            vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
-            setBypassDnd(true)
-            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-            // Sin sonido en el canal: el tono elegido lo reproduce RingActivity
-            // (así no se duplica ni se pisa con el tono seleccionado).
-            setSound(null, null)
-        }
-
         nm.createNotificationChannel(service)
-        nm.createNotificationChannel(ring)
+
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+
+        // Un canal por tono, CADA UNO CON SU SONIDO. Así el timbre suena aunque
+        // no se abra la pantalla completa (p. ej. sin permiso de full-screen,
+        // cuando el push llega con la app cerrada).
+        Ringtones.all.forEach { tone ->
+            val ch = NotificationChannel(
+                ringChannelId(tone.id),
+                "Timbre — ${tone.label}",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerta cuando alguien toca el timbre"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
+                setBypassDnd(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setSound(Uri.parse("android.resource://$packageName/${tone.res}"), attrs)
+            }
+            nm.createNotificationChannel(ch)
+        }
     }
 
     companion object {
         const val CHANNEL_SERVICE = "toctoc_service"
-        // v2: canal silencioso (el tono lo pone RingActivity). Nuevo id para
-        // reemplazar el canal viejo que tenía sonido fijo.
-        const val CHANNEL_RING = "toctoc_ring2"
+        // Un canal por tono (v3), cada uno con su sonido incorporado.
+        fun ringChannelId(toneId: String): String = "toctoc_ring_${toneId}_v3"
     }
 }

@@ -165,6 +165,11 @@ class RingActivity : ComponentActivity() {
             if (now - lastRingAt < DEBOUNCE_MS) return
             lastRingAt = now
 
+            val tone = try {
+                SettingsRepository(context.applicationContext).snapshot().ringtone
+            } catch (_: Exception) { Ringtones.DEFAULT_ID }
+            val channelId = TocTocApp.ringChannelId(tone)
+
             val full = Intent(context, RingActivity::class.java).apply {
                 putExtra(EXTRA_MESSAGE, message)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -173,7 +178,7 @@ class RingActivity : ComponentActivity() {
                 context, 1, full,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            val notif = NotificationCompat.Builder(context, TocTocApp.CHANNEL_RING)
+            val notif = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_stat_bell)
                 .setContentTitle("🔔 ¡Timbre!")
                 .setContentText(message)
