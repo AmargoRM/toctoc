@@ -115,7 +115,7 @@
         </service>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="toctoc_ring2" />
+            android:value="toctoc_ring_dingdong_v3" />
 
         <receiver
             android:name=".BootReceiver"
