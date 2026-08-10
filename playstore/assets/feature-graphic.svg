@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3F51B5"/>
+      <stop offset="1" stop-color="#283593"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="500" fill="url(#bg)"/>
+
+  <!-- Ícono de campana blanco a la izquierda -->
+  <g transform="translate(120,120) scale(5.2)" fill="#FFFFFF">
+    <circle cx="24" cy="6" r="4"/>
+    <path d="M24,10 C15,10 10,17 10,26 L10,34 C10,38 8,40 6,42 L42,42 C40,40 38,38 38,34 L38,26 C38,17 33,10 24,10 Z"/>
+    <circle cx="24" cy="46" r="5"/>
+  </g>
+
+  <!-- Texto -->
+  <text x="470" y="235" font-family="Arial, Helvetica, sans-serif" font-size="96" font-weight="800" fill="#FFFFFF">Upe timbre</text>
+  <text x="472" y="300" font-family="Arial, Helvetica, sans-serif" font-size="42" fill="#Dfe3ff">Tu timbre NFC, sin cables ni pilas</text>
+  <text x="472" y="360" font-family="Arial, Helvetica, sans-serif" font-size="34" fill="#B9C0f0">Pegá · Tocá · Soná 🔔</text>
+</svg>

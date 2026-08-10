@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Upe timbre — Política de privacidad</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 760px; margin: 0 auto; padding: 28px 20px 60px; color: #1c1c1c; line-height: 1.6; }
+  h1 { font-size: 26px; } h2 { font-size: 19px; margin-top: 28px; }
+  code { background: #f0f0f5; padding: 1px 6px; border-radius: 6px; }
+  .muted { color: #666; font-size: 14px; }
+  a { color: #3F51B5; }
+  ul { padding-left: 20px; }
+</style>
+</head>
+<body>
+  <h1>Política de privacidad — Upe timbre</h1>
+  <p class="muted">Última actualización: 10 de agosto de 2026</p>
+
+  <p><strong>Upe timbre</strong> ("la app") convierte una etiqueta NFC en un timbre:
+  cuando alguien toca la etiqueta, tu teléfono recibe una alerta. Esta política
+  explica qué datos maneja la app y con qué fin. Diseñamos la app para funcionar
+  con los <strong>mínimos datos posibles</strong> y <strong>sin cuentas de usuario</strong>.</p>
+
+  <h2>1. Qué datos maneja la app</h2>
+  <ul>
+    <li><strong>Identificador del timbre ("topic"):</strong> un código aleatorio que se
+      genera en tu teléfono (por ejemplo <code>timbre-abc123</code>). No está vinculado
+      a tu identidad ni a tu cuenta.</li>
+    <li><strong>Nombre del timbre:</strong> un texto que vos elegís (por ejemplo "Casa"),
+      solo para reconocer tu timbre. No pedimos tu nombre real.</li>
+    <li><strong>Token de mensajería (FCM):</strong> para entregar el aviso usamos
+      <strong>Firebase Cloud Messaging</strong> (Google). Google gestiona un identificador
+      técnico del dispositivo para poder entregar el mensaje.</li>
+  </ul>
+  <p>La app <strong>no</strong> recopila tu nombre, correo, teléfono, ubicación, contactos,
+  fotos ni ningún dato personal. <strong>No</strong> hay registro ni inicio de sesión.</p>
+
+  <h2>2. Con quién se comparten y para qué</h2>
+  <p>Cuando alguien toca tu timbre, el identificador y el nombre del timbre se envían,
+  únicamente para <strong>entregar la alerta</strong>, a:</p>
+  <ul>
+    <li><strong>Firebase Cloud Messaging — Google</strong> (envío del push).
+      <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Política</a>.</li>
+    <li><strong>Servicio de reenvío propio</strong> alojado en <strong>Cloudflare Workers</strong>,
+      que solo reenvía el aviso y <strong>no almacena datos</strong>.
+      <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Política</a>.</li>
+    <li>En algunas versiones, <strong>ntfy</strong> (<code>ntfy.sh</code>) como servicio de aviso.
+      <a href="https://ntfy.sh/docs/privacy/" target="_blank" rel="noopener">Política</a>.</li>
+  </ul>
+  <p>No vendemos ni cedemos datos a terceros con fines publicitarios.</p>
+
+  <h2>3. Permisos y por qué se usan</h2>
+  <ul>
+    <li><strong>Notificaciones / pantalla completa:</strong> para avisarte y mostrar el timbre.</li>
+    <li><strong>NFC:</strong> para grabar y leer las etiquetas.</li>
+    <li><strong>Servicio en segundo plano / vibración / evitar suspensión:</strong> para no
+      perder avisos (en las versiones que escuchan en segundo plano).</li>
+  </ul>
+  <p>No se usan permisos de ubicación, contactos, cámara ni micrófono.</p>
+
+  <h2>4. Transmisión y conservación</h2>
+  <p>Los datos se transmiten <strong>cifrados</strong> (HTTPS). El identificador y el nombre
+  del timbre se guardan <strong>en tu teléfono</strong>; se eliminan al desinstalar la app.
+  Podés generar un identificador nuevo en cualquier momento desde la app.</p>
+
+  <h2>5. Menores</h2>
+  <p>La app no está dirigida a menores de 13 años y no recopila datos de ellos
+  deliberadamente.</p>
+
+  <h2>6. Cambios</h2>
+  <p>Si actualizamos esta política, publicaremos la nueva versión en esta misma página
+  con su fecha.</p>
+
+  <h2>7. Contacto</h2>
+  <p>Ante cualquier duda sobre privacidad: <a href="mailto:amargo95@gmail.com">amargo95@gmail.com</a></p>
+</body>
+</html>
