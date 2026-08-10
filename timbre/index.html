@@ -70,6 +70,8 @@
   var name = qs.get("n") || "la casa";
   var alreadyWeb = qs.get("app") === "0";
   var isAndroid = /android/i.test(navigator.userAgent);
+  // Relay que envía el push por FCM (suena con la app cerrada / dormida)
+  var RELAY = "https://upe-timbre-relay.estebanrm8474.workers.dev";
 
   var elWho = document.getElementById("who");
   var elStatus = document.getElementById("status");
@@ -88,21 +90,29 @@
     elRing.disabled = true;
     elBell.classList.add("ringing");
     setStatus('<span class="spinner"></span> Tocando…');
-    var url = server + "/" + encodeURIComponent(topic)
+
+    // 1) ntfy (para versiones que escuchan por servicio en primer plano)
+    var ntfyUrl = server + "/" + encodeURIComponent(topic)
       + "?title=" + encodeURIComponent(name) + "&tags=bell&priority=high";
-    fetch(url, { method: "POST", body: "Alguien está tocando el timbre de " + name })
-      .then(function (r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
+    var pNtfy = fetch(ntfyUrl, { method: "POST", body: "Alguien está tocando el timbre de " + name })
+      .then(function (r) { return r.ok; }).catch(function () { return false; });
+
+    // 2) relay FCM (para que suene con la app cerrada / el teléfono dormido)
+    var relayUrl = RELAY + "/ring?t=" + encodeURIComponent(topic) + "&n=" + encodeURIComponent(name);
+    var pRelay = fetch(relayUrl)
+      .then(function (r) { return r.ok; }).catch(function () { return false; });
+
+    Promise.all([pNtfy, pRelay]).then(function (res) {
+      if (res[0] || res[1]) {
         setStatus("✅ ¡Listo! Ya avisamos que estás en la puerta.", "ok");
         elRing.textContent = "Tocar de nuevo";
-      })
-      .catch(function () {
+      } else {
         published = false;   // permitir reintento
         setStatus("❌ No se pudo avisar. Tocá «Tocar de nuevo».", "err");
-      })
-      .finally(function () {
-        setTimeout(function () { elBell.classList.remove("ringing"); elRing.disabled = false; }, 1200);
-      });
+      }
+    }).finally(function () {
+      setTimeout(function () { elBell.classList.remove("ringing"); elRing.disabled = false; }, 1200);
+    });
   }
 
   // Deep link opcional a la app (nunca bloquea el timbre)
