@@ -68,7 +68,7 @@ Español (es-419 / Latinoamérica). Se puede agregar inglés después.
 | Recurso | Tamaño | Estado |
 |---|---|---|
 | Ícono de la app | 512×512 PNG | ✅ `playstore/assets/icon-512.png` |
-| Gráfico destacado | 1024×500 PNG | ⏳ exportar de `playstore/assets/feature-graphic.svg` |
+| Gráfico destacado | 1024×500 PNG | ✅ `playstore/assets/feature-graphic.png` |
 | Capturas de teléfono (mín. 2) | 1080×1920 aprox. | ⏳ **las sacás vos** del teléfono |
 
 ### Qué capturas sacar (desde tu teléfono, con la app)
