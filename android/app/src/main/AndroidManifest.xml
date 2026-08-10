@@ -104,6 +104,19 @@
                 android:value="Escucha permanente del timbre NFC para alertar al usuario en tiempo real." />
         </service>
 
+        <!-- Recepción de pushes de FCM (llega con la app cerrada / dormida) -->
+        <service
+            android:name=".service.TocTocMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.messaging.RECEIVE" />
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="toctoc_ring2" />
+
         <receiver
             android:name=".BootReceiver"
             android:exported="true"

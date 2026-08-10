@@ -4,12 +4,13 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
 // ---- App version. Bump these two on every release. ----
 // versionCode MUST strictly increase; the in-app updater compares it.
-val appVersionCode = 7
-val appVersionName = "1.0.6"
+val appVersionCode = 8
+val appVersionName = "1.0.7"
 
 android {
     namespace = "app.toctoc.timbre"
@@ -73,6 +74,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -110,6 +112,12 @@ dependencies {
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    // Firebase Cloud Messaging (push que llega con la app cerrada / dormida)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
