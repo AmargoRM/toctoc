@@ -259,6 +259,9 @@ fun MainScreen(
             }
 
             // ---- Actualizaciones ----
+            // Solo en el build sideload: Google Play prohíbe que la app se
+            // actualice sola, así que en el flavor "play" se oculta esta sección.
+            if (!BuildConfig.PLAY_BUILD)
             SectionCard(title = "Actualizaciones", icon = Icons.Filled.SystemUpdate) {
                 Text(
                     "Versión instalada: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",

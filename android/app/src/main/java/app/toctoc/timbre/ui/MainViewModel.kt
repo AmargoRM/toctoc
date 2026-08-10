@@ -3,6 +3,7 @@ package app.toctoc.timbre.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.toctoc.timbre.BuildConfig
 import app.toctoc.timbre.data.Links
 import app.toctoc.timbre.data.Ntfy
 import app.toctoc.timbre.data.Ringtones
@@ -84,8 +85,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val topic = repo.ensureTopic()
         repo.setListening(on)
         subscribeFcm(topic, on)
-        val ctx = getApplication<Application>()
-        if (on) RingListenerService.start(ctx) else RingListenerService.stop(ctx)
+        // En el build de Play la entrega es 100% FCM: no hay servicio de escucha.
+        if (!BuildConfig.PLAY_BUILD) {
+            val ctx = getApplication<Application>()
+            if (on) RingListenerService.start(ctx) else RingListenerService.stop(ctx)
+        }
     }
 
     fun testRing() = viewModelScope.launch {

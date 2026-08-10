@@ -9,8 +9,8 @@ plugins {
 
 // ---- App version. Bump these two on every release. ----
 // versionCode MUST strictly increase; the in-app updater compares it.
-val appVersionCode = 10
-val appVersionName = "1.0.9"
+val appVersionCode = 11
+val appVersionName = "1.0.10"
 
 android {
     namespace = "app.toctoc.timbre"
@@ -55,6 +55,23 @@ android {
             storePassword = "toctoc123"
             keyAlias = "toctoc"
             keyPassword = "toctoc123"
+        }
+    }
+
+    // Dos variantes de distribución:
+    //  - sideload: instalación por APK (fuera de Play). Trae autoactualizador y
+    //    servicio de escucha en primer plano.
+    //  - play: build para Google Play. Sin autoactualizador (prohibido por Play)
+    //    ni permisos/servicios sensibles; la entrega la hace 100% FCM.
+    flavorDimensions += "dist"
+    productFlavors {
+        create("sideload") {
+            dimension = "dist"
+            buildConfigField("boolean", "PLAY_BUILD", "false")
+        }
+        create("play") {
+            dimension = "dist"
+            buildConfigField("boolean", "PLAY_BUILD", "true")
         }
     }
 

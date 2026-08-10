@@ -10,6 +10,8 @@ import app.toctoc.timbre.service.RingListenerService
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
+        // En el build de Play no existe el servicio de escucha (entrega por FCM).
+        if (BuildConfig.PLAY_BUILD) return
         if (action == Intent.ACTION_BOOT_COMPLETED ||
             action == Intent.ACTION_MY_PACKAGE_REPLACED
         ) {

@@ -28,8 +28,19 @@ Todo lo que necesitás para cargar la ficha y el cumplimiento en Play Console.
 - La política queda pública **al mergear a `main`** (GitHub Pages ya está activo).
 - Estos materiales **no** afectan la app ni el build; son solo para la tienda.
 
-## Lo que falta (Fase 1 — código, más adelante)
-- Build "Play": quitar el autoactualizador y (gracias a FCM) el servicio en primer
-  plano permanente.
-- AAB + clave de subida + Play App Signing + actualizar `assetlinks.json` con la
-  huella de Play.
+## Fase 1 — código (en progreso)
+Ya hecho (flavor **`play`** separado del **`sideload`**):
+- ✅ **Autoactualizador oculto** en el build de Play (Play lo prohíbe).
+- ✅ **Sin servicio de escucha en primer plano** ni permisos sensibles
+  (`REQUEST_INSTALL_PACKAGES`, `FOREGROUND_SERVICE*`,
+  `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, `RECEIVE_BOOT_COMPLETED`): la entrega
+  es 100% **FCM**.
+- ✅ **CI genera el AAB**: `bundlePlayRelease` → `upe-timbre-play.aab` (adjunto al
+  Release). El APK sideload (`toctoc.apk`) se sigue generando aparte.
+
+Falta para subir:
+- [ ] Subir `upe-timbre-play.aab` a Play Console (pista interna/cerrada primero).
+- [ ] Activar **Play App Signing** (podés usar la keystore del repo como clave de
+  subida).
+- [ ] Tras habilitar App Signing, actualizar `.well-known/assetlinks.json` con la
+  **huella SHA-256 de la clave de firma de Play** (App Links).
