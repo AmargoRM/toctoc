@@ -1,5 +1,6 @@
 package app.toctoc.timbre.service
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -50,6 +51,28 @@ class RingListenerService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * Cuando el usuario cierra la app (swipe en recientes), el sistema puede
+     * detener el servicio. Reprogramamos su reinicio para seguir escuchando.
+     * (Mejor esfuerzo: en Android 12+ el reinicio en segundo plano puede estar
+     * limitado por el sistema; la solución definitiva y confiable es FCM.)
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        try {
+            val settings = SettingsRepository(applicationContext).snapshot()
+            if (settings.listening && settings.topic.isNotBlank()) {
+                val restart = Intent(applicationContext, RingListenerService::class.java)
+                val pi = PendingIntent.getService(
+                    this, 1, restart,
+                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                am.set(AlarmManager.RTC, System.currentTimeMillis() + 1500, pi)
+            }
+        } catch (_: Exception) {}
+        super.onTaskRemoved(rootIntent)
+    }
+
     private fun startForegroundCompat() {
         val openApp = PendingIntent.getActivity(
             this, 0,
@@ -65,13 +88,18 @@ class RingListenerService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
-                startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
-                startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            else ->
-                startForeground(NOTIF_ID, notif)
+        try {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                    startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                    startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                else ->
+                    startForeground(NOTIF_ID, notif)
+            }
+        } catch (_: Exception) {
+            // p. ej. ForegroundServiceStartNotAllowedException al reiniciar en
+            // segundo plano en Android 12+. Evitamos que tire la app.
         }
     }
 
