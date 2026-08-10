@@ -150,12 +150,21 @@ class RingActivity : ComponentActivity() {
         private const val RING_NOTIF_ID = 2002
         private const val AUTO_DISMISS_SECONDS = 60
 
+        // Anti-doble-timbre: si llegan dos avisos casi juntos (p. ej. ntfy y FCM
+        // durante la transición), ignoramos el segundo.
+        @Volatile private var lastRingAt = 0L
+        private const val DEBOUNCE_MS = 4000L
+
         /**
          * Punto de entrada desde el servicio. Publica una notificación con
          * full-screen intent (patrón de "llamada entrante") que el sistema usa
          * para abrir la pantalla del timbre aun estando bloqueado.
          */
         fun start(context: Context, message: String) {
+            val now = System.currentTimeMillis()
+            if (now - lastRingAt < DEBOUNCE_MS) return
+            lastRingAt = now
+
             val full = Intent(context, RingActivity::class.java).apply {
                 putExtra(EXTRA_MESSAGE, message)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
