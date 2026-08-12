@@ -52,3 +52,24 @@ ntfy, durante la transición). Ahí queda todo conectado.
 - El Worker **no guarda datos**: solo reenvía. El único dato sensible es el
   `SERVICE_ACCOUNT`, que vive como secreto en Cloudflare.
 - Si algún día rotás la clave de servicio, actualizá el secreto y listo.
+
+---
+
+## Diagnóstico de errores (qué devuelve `/ring`)
+Abrí `https://…workers.dev/ring?t=timbre-xxxx&n=test` en el navegador:
+
+| Respuesta | Causa | Solución |
+|---|---|---|
+| `{"ok":true,...}` | Todo bien | 🎉 |
+| `Cannot read properties of undefined (reading 'replace')` | El `SERVICE_ACCOUNT` **no tiene `private_key`** (JSON incompleto o pegaste algo que no era el archivo de la cuenta de servicio). | Volvé a hacer el **Paso 1** y **Paso 3**: generá una clave privada nueva y pegá el **JSON COMPLETO** en el secreto. |
+| `Falta el secreto SERVICE_ACCOUNT` | El secreto no existe o se llama distinto. | Paso 3: creá el secreto con nombre **exacto** `SERVICE_ACCOUNT`. |
+| `SERVICE_ACCOUNT no es JSON válido` | Se cortó/pegó mal el JSON. | Repetí el Paso 3 pegando el archivo completo. |
+| `Al SERVICE_ACCOUNT le faltan campos: ...` | El JSON existe pero le faltan campos. | Pegá el `.json` **completo** sin editar. |
+| `sin access_token: ...` | La cuenta de servicio no tiene permisos FCM, o el proyecto está mal. | Verificá que la cuenta sea del proyecto **upe-timbre** y tenga rol de mensajería. |
+
+> ⚠️ **El error actual es el de la primera fila**: `reading 'replace'` = falta
+> `private_key`. Hay que **regenerar la clave** (Firebase → Cuentas de servicio →
+> *Generar nueva clave privada*) y **pegar el JSON completo** en el secreto
+> `SERVICE_ACCOUNT` de Cloudflare. Un error común es pegar solo un fragmento o
+> el JSON de configuración del cliente (`google-services.json`) en vez del de
+> la **cuenta de servicio**: son archivos distintos.

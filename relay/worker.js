@@ -36,7 +36,37 @@ export default {
     }
 
     try {
-      const sa = JSON.parse(env.SERVICE_ACCOUNT);
+      if (!env.SERVICE_ACCOUNT) {
+        return json(
+          { ok: false, error: "Falta el secreto SERVICE_ACCOUNT en el Worker." },
+          500, cors
+        );
+      }
+      let sa;
+      try {
+        sa = JSON.parse(env.SERVICE_ACCOUNT);
+      } catch (e) {
+        return json(
+          { ok: false, error: "SERVICE_ACCOUNT no es JSON válido: " + e.message },
+          500, cors
+        );
+      }
+      // Validamos los campos que necesitamos para firmar el JWT de Firebase.
+      const missing = ["private_key", "client_email", "project_id"].filter(
+        (k) => !sa[k]
+      );
+      if (missing.length) {
+        return json(
+          {
+            ok: false,
+            error:
+              "Al SERVICE_ACCOUNT le faltan campos: " +
+              missing.join(", ") +
+              ". Pegá el JSON COMPLETO de la cuenta de servicio de Firebase.",
+          },
+          500, cors
+        );
+      }
       const accessToken = await getAccessToken(sa);
       const res = await fetch(
         `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`,
