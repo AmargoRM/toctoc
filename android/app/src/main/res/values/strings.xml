@@ -1,7 +1,7 @@
 <resources>
-    <string name="app_name">TocToc</string>
+    <string name="app_name">Upe timbre</string>
     <string name="ring_channel_name">Timbre</string>
     <string name="service_channel_name">Escucha del timbre</string>
-    <string name="listening_notification_title">TocToc está escuchando</string>
+    <string name="listening_notification_title">Upe timbre está escuchando</string>
     <string name="listening_notification_text">Tu timbre NFC está activo</string>
 </resources>

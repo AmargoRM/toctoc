@@ -24,7 +24,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import app.toctoc.timbre.BuildConfig
 import app.toctoc.timbre.data.Ntfy
+import app.toctoc.timbre.data.Relay
 import app.toctoc.timbre.ui.theme.TocTocTheme
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 
 /**
@@ -50,11 +53,17 @@ class SendRingActivity : ComponentActivity() {
                     doorbellName = name,
                     onRing = { onDone ->
                         lifecycleScope.launch {
-                            val r = Ntfy.publish(
-                                server, topic,
-                                "Alguien está tocando el timbre de $name", name
-                            )
-                            onDone(r.isSuccess)
+                            // Disparamos AMBAS vías en paralelo (igual que la web):
+                            //  - Relay/FCM: llega con la app cerrada / teléfono dormido.
+                            //  - ntfy: back-up para versiones sideload que aún escuchan
+                            //    por servicio en primer plano.
+                            // Basta con que UNA tenga éxito.
+                            val msg = "Alguien está tocando el timbre de $name"
+                            val results = listOf(
+                                async { Relay.ring(topic, name) },
+                                async { Ntfy.publish(server, topic, msg, name) }
+                            ).awaitAll()
+                            onDone(results.any { it.isSuccess })
                         }
                     }
                 )
@@ -147,7 +156,7 @@ private fun SendRingScreen(
             }
             Spacer(Modifier.height(28.dp))
             Text(
-                "Enviado con TocToc · timbre NFC",
+                "Enviado con Upe timbre · timbre NFC",
                 color = Color(0x99FFFFFF), fontSize = 12.sp
             )
         }

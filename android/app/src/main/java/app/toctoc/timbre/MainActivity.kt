@@ -36,7 +36,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestNotificationPermissionIfNeeded()
+        // Los permisos ahora los pide el onboarding secuencial de MainScreen
+        // (PermissionOnboarding), que no los deja opcionales.
 
         setContent {
             TocTocTheme {

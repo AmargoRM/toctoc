@@ -45,6 +45,14 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    // Onboarding de permisos: al primer arranque pide notificaciones,
+    // pantalla completa y exclusión de batería en secuencia. Solo se cierra
+    // cuando el usuario los concedió todos (o los saltó desde ajustes).
+    var onboardingDone by remember { mutableStateOf(false) }
+    if (!onboardingDone) {
+        PermissionOnboarding(onFinished = { onboardingDone = true })
+    }
+
     // Reproductor para escuchar una vista previa del tono
     val previewPlayer = remember { mutableStateOf<android.media.MediaPlayer?>(null) }
     fun preview(res: Int) {
@@ -66,7 +74,7 @@ fun MainScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("TocToc", fontWeight = FontWeight.Bold) },
+                title = { Text("Upe timbre", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
@@ -200,7 +208,7 @@ fun MainScreen(
             SectionCard(title = "Recibir en otro teléfono", icon = Icons.Filled.PhoneIphone) {
                 Text(
                     "¿Querés recibir el timbre en un iPhone u otro teléfono sin instalar " +
-                        "TocToc? Compartí este enlace: explica cómo recibirlo con la app " +
+                        "Upe timbre? Compartí este enlace: explica cómo recibirlo con la app " +
                         "gratuita ntfy (incluye un QR).",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -315,7 +323,7 @@ fun MainScreen(
             // ---- Fiabilidad / batería ----
             SectionCard(title = "Que no se pierda ningún timbre", icon = Icons.Filled.BatteryAlert) {
                 Text(
-                    "Para que el timbre suene siempre, desactivá la optimización de batería para TocToc.",
+                    "Para que el timbre suene siempre, desactivá la optimización de batería para Upe timbre.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

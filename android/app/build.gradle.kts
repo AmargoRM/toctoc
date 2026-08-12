@@ -9,8 +9,8 @@ plugins {
 
 // ---- App version. Bump these two on every release. ----
 // versionCode MUST strictly increase; the in-app updater compares it.
-val appVersionCode = 11
-val appVersionName = "1.0.10"
+val appVersionCode = 12
+val appVersionName = "1.0.11"
 
 android {
     namespace = "app.toctoc.timbre"
