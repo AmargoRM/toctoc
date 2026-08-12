@@ -32,6 +32,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Cachea el Gradle wrapper + dependencias y reintenta la descarga si
+      # services.gradle.org devuelve un EOF (flake que ya nos rompió 2 builds).
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
@@ -52,10 +59,21 @@ jobs:
           echo "Version $NAME ($CODE)"
 
       - name: Build sideload APK (instalación fuera de Play)
-        run: ./gradlew :app:assembleSideloadRelease --no-daemon --stacktrace
+        run: |
+          # Reintentos por el flake de services.gradle.org al bajar el wrapper.
+          for i in 1 2 3 4; do
+            ./gradlew :app:assembleSideloadRelease --no-daemon --stacktrace && break
+            echo "Intento $i falló, reintentando en $((i*10))s..."
+            sleep $((i*10))
+          done
 
       - name: Build Play AAB (para subir a Google Play)
-        run: ./gradlew :app:bundlePlayRelease --no-daemon --stacktrace
+        run: |
+          for i in 1 2 3 4; do
+            ./gradlew :app:bundlePlayRelease --no-daemon --stacktrace && break
+            echo "Intento $i falló, reintentando en $((i*10))s..."
+            sleep $((i*10))
+          done
 
       - name: Prepare release assets
         run: |
