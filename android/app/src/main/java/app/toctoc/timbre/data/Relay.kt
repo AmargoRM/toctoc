@@ -22,9 +22,21 @@ object Relay {
                 connectTimeout = 15_000
                 readTimeout = 15_000
             }
-            val ok = conn.responseCode in 200..299
-            conn.disconnect()
-            if (ok) Result.success(Unit) else Result.failure(Exception("HTTP ${conn.responseCode}"))
+            val code = conn.responseCode
+            val ok = code in 200..299
+            if (ok) {
+                conn.disconnect()
+                Result.success(Unit)
+            } else {
+                // El worker devuelve el detalle del fallo en el body (JSON con
+                // el error de FCM). Lo leemos para poder diagnosticar.
+                val detail = try {
+                    (conn.errorStream ?: conn.inputStream)
+                        ?.bufferedReader()?.use { it.readText() }?.take(300)
+                } catch (_: Exception) { null }
+                conn.disconnect()
+                Result.failure(Exception("HTTP $code${detail?.let { ": $it" } ?: ""}"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
