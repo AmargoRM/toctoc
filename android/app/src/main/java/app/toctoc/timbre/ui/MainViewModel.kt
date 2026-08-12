@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.toctoc.timbre.BuildConfig
 import app.toctoc.timbre.data.Links
 import app.toctoc.timbre.data.Ntfy
+import app.toctoc.timbre.data.Relay
 import app.toctoc.timbre.data.Ringtones
 import app.toctoc.timbre.data.SettingsRepository
 import app.toctoc.timbre.data.TocTocSettings
@@ -94,8 +95,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun testRing() = viewModelScope.launch {
         val s = settings.value
-        val r = Ntfy.publish(s.ntfyServer, s.topic, "Prueba de timbre 🔔", s.doorbellName)
-        toast.value = if (r.isSuccess) "Timbre de prueba enviado" else "No se pudo enviar: ${r.exceptionOrNull()?.message}"
+        // Igual que el visitante y la web: dispara ambas vías. En Play la única
+        // que sirve es Relay/FCM, pero mostramos el resultado de cada una para
+        // poder diagnosticar por qué el timbre no suena.
+        val relayR = Relay.ring(s.topic, s.doorbellName)
+        val ntfyR = Ntfy.publish(s.ntfyServer, s.topic, "Prueba de timbre 🔔", s.doorbellName)
+        val relayOk = relayR.isSuccess
+        val ntfyOk = ntfyR.isSuccess
+        toast.value = when {
+            relayOk -> "Enviado por FCM. Si no suena en unos segundos, revisá permisos de notificación y batería."
+            ntfyOk -> "Solo llegó por ntfy (no llega en Play). Relay caído: ${relayR.exceptionOrNull()?.message}"
+            else -> "Falló todo. Relay: ${relayR.exceptionOrNull()?.message}. ntfy: ${ntfyR.exceptionOrNull()?.message}"
+        }
     }
 
     fun checkUpdate() = viewModelScope.launch {
