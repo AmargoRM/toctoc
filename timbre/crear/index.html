@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#3F51B5" />
-<title>TocToc — Creá tu timbre</title>
+<title>Upe timbre — Creá tu timbre</title>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -54,6 +54,12 @@
   .foot { margin-top: 24px; font-size: 12px; opacity: .7; }
   a { color:#fff; }
   hr { border:none; border-top:1px solid rgba(255,255,255,.15); margin:14px 0; }
+  details { margin: 8px 0; }
+  details summary { cursor:pointer; font-weight: 700; font-size: 14px; padding: 6px 0; }
+  details[open] summary { margin-bottom: 6px; }
+  ol { padding-left: 22px; margin: 6px 0; } ol li { margin: 4px 0; font-size: 13.5px; }
+  .warn { background: rgba(255, 170, 40, .18); border: 1px solid rgba(255, 170, 40, .5);
+    border-radius: 10px; padding: 10px 12px; font-size: 13px; margin: 10px 0; }
 </style>
 </head>
 <body>
@@ -113,27 +119,23 @@
     }
 
     function publishTest(t) {
-      var url = subUrl(t) + "?title=" + encodeURIComponent(t.name) + "&tags=bell&priority=high";
-      return fetch(url, { method: "POST", body: "Prueba de timbre 🔔 (" + t.name + ")" });
+      // priority=5 (max) para que ntfy dispare la notificación más intrusiva
+      // que el sistema permita (respeta modos "no molestar" / "urgent").
+      var url = subUrl(t) + "?title=" + encodeURIComponent(t.name)
+        + "&tags=bell,rotating_light&priority=5";
+      return fetch(url, { method: "POST", body: "🔔 Prueba de timbre (" + t.name + ")" });
     }
 
     var iosStore = "https://apps.apple.com/app/ntfy/id1625396347";
     var androidStore = "https://play.google.com/store/apps/details?id=io.heckel.ntfy";
-    var nfcSupported = ("NDEFReader" in window);
+    var upeStore = "https://play.google.com/store/apps/details?id=app.toctoc.timbre";
+    var ua = navigator.userAgent || "";
+    var isIOS = /iPhone|iPad|iPod/i.test(ua);
+    var isAndroid = /Android/i.test(ua);
 
     function renderPanel(t) {
       elCreate.classList.add("hidden");
       elPanel.classList.remove("hidden");
-
-      var nfcBlock = nfcSupported
-        ? '<button class="btn" id="writeBtn">📶 Grabar etiqueta ahora</button>'
-          + '<div class="status center" id="writeStatus"></div>'
-          + '<p class="muted">Tocá el botón y apoyá una etiqueta NFC en blanco (NTAG213/215/216) en la parte de atrás del teléfono.</p>'
-        : '<p>Tu teléfono no permite grabar NFC desde el navegador (es un límite de iPhone). Dos opciones:</p>'
-          + '<p>• <strong>Pedí tu etiqueta ya grabada</strong> (te la entregamos lista).<br>'
-          + '• O grabala vos con una app gratis (<strong>NFC Tools</strong> o <strong>Atajos</strong> de Apple) pegando esta URL:</p>'
-          + '<div class="mono" id="tagUrlBox"></div>'
-          + '<button class="btn ghost" id="copyTag" style="margin-top:10px">Copiar URL de la etiqueta</button>';
 
       elPanel.innerHTML =
         '<div class="card center">'
@@ -143,28 +145,76 @@
 
         + '<div class="card">'
         + '  <h2><span class="step">2</span> Recibí el aviso en tu teléfono</h2>'
-        + '  <p>Instalá <strong>ntfy</strong> (gratis) — es lo que suena cuando tocan tu timbre, aun bloqueado.</p>'
-        + '  <div class="row">'
-        + '    <a class="btn" href="' + iosStore + '" target="_blank" rel="noopener">🍎 iPhone</a>'
-        + '    <a class="btn" href="' + androidStore + '" target="_blank" rel="noopener">🤖 Android</a>'
+        + '  <p>Elegí cómo querés recibir el timbre en tu teléfono. La opción con'
+        + '     alarma más fuerte es <strong>Upe timbre</strong> (Android).</p>'
+        + '  <div class="row" style="margin-top:8px">'
+        + '    <a class="btn" href="' + upeStore + '" target="_blank" rel="noopener">🔔 Upe timbre (Android)</a>'
         + '  </div>'
         + '  <hr>'
-        + '  <p>Abrí ntfy y suscribite a tu tema (o escaneá el QR):</p>'
-        + '  <a class="btn" id="openNtfy" target="_blank" rel="noopener">📲 Abrir en ntfy</a>'
+        + '  <p><strong>Sin Upe timbre (iPhone y otros Android):</strong> usá la app <em>ntfy</em> (gratis).</p>'
+        + '  <div class="row">'
+        + '    <a class="btn ghost" href="' + iosStore + '" target="_blank" rel="noopener">🍎 iPhone</a>'
+        + '    <a class="btn ghost" href="' + androidStore + '" target="_blank" rel="noopener">🤖 Android</a>'
+        + '  </div>'
+        + '  <p style="margin-top:10px">Abrí ntfy y suscribite (o escaneá el QR):</p>'
+        + '  <a class="btn ghost" id="openNtfy" target="_blank" rel="noopener">📲 Abrir en ntfy</a>'
         + '  <div class="center"><div class="qrbox" id="qrSub"></div></div>'
-        + '  <p class="muted">Si te pide el nombre del tema, poné exactamente: <span class="mono" id="topicInline" style="background:none;padding:0"></span></p>'
+        + '  <p class="muted">Nombre del tema: <span class="mono" id="topicInline" style="background:none;padding:0"></span></p>'
+        + '</div>'
+
+        // === NUEVA SECCIÓN: sonido de alarma en ntfy ===
+        + '<div class="card">'
+        + '  <h2>🔊 Sonido tipo alarma (que despierte)</h2>'
+        + '  <p>Por defecto ntfy hace un "ding" tranquilo. Si querés que suene <strong>tipo despertador</strong> aunque el teléfono esté en silencio, hay que configurarlo en la app de ntfy. Elegí tu plataforma:</p>'
+        + '  <details><summary>🤖 En Android (ntfy)</summary>'
+        + '    <ol>'
+        + '      <li>Abrí <strong>ntfy</strong> → mantené <strong>presionado</strong> tu suscripción (el tema del timbre).</li>'
+        + '      <li>Tocá <strong>Editar</strong> → <strong>Sound</strong> (Sonido).</li>'
+        + '      <li>Elegí <strong>Alarm</strong> u otro sonido fuerte del sistema.</li>'
+        + '      <li>Volvé, tocá <strong>Notifications</strong> (o el ícono de la campana) → <strong>Priority</strong>: <strong>Max</strong>.</li>'
+        + '      <li>En Ajustes del sistema → Notificaciones de ntfy → subí volumen y desactivá <em>No molestar</em> para esa categoría.</li>'
+        + '    </ol>'
+        + '    <p class="muted">Con esto el timbre suena fuerte y persistente aunque el teléfono esté bloqueado.</p>'
+        + '  </details>'
+        + '  <details><summary>🍎 En iPhone (ntfy)</summary>'
+        + '    <ol>'
+        + '      <li>Abrí <strong>ntfy</strong> → suscribite al tema si aún no lo hiciste.</li>'
+        + '      <li>Andá a <strong>Ajustes de iOS → Notificaciones → ntfy</strong>.</li>'
+        + '      <li>Activá <strong>Alertas críticas</strong> (dentro de "Aviso urgente" o similar) y <strong>Sonidos</strong>.</li>'
+        + '      <li>Prioridad se envía como <code>priority=5</code> desde acá — así iOS lo trata como "Time Sensitive".</li>'
+        + '    </ol>'
+        + '    <p><strong>Para que suene como despertador</strong> (más fuerte todavía) hay dos trucos:</p>'
+        + '    <ol>'
+        + '      <li><strong>Atajos → Automatización</strong>: creá una automatización personal <em>"Al abrir la app ntfy"</em> → acción <strong>Reproducir sonido</strong> con un tono de alarma del sistema. Cada vez que llega un timbre y abrís ntfy, dispara la alarma.</li>'
+        + '      <li>Alternativa avanzada: crear una automatización con <em>Alarm</em> nativa vía Atajos — ver más info en <a href="https://ntfy.sh/docs/subscribe/phone/#iphoneipad" target="_blank" rel="noopener">docs ntfy iOS</a>.</li>'
+        + '    </ol>'
+        + '    <p class="warn">Nota: iOS bloquea que apps de terceros suenen como alarma real (bug bypass). El botón "Probar" de acá abajo envía prioridad máxima; si igual suena bajito, revisá los pasos de arriba.</p>'
+        + '  </details>'
         + '</div>'
 
         + '<div class="card">'
         + '  <h2><span class="step">3</span> Tu etiqueta NFC (para la puerta)</h2>'
-        + '  <p>Cuando alguien la toque, suena tu timbre. Compartí el enlace o escaneá para verlo:</p>'
+        + '  <p>Cuando alguien la toque, suena tu timbre. Compartí el enlace o escaneá:</p>'
         + '  <div class="center"><div class="qrbox" id="qrTag"></div></div>'
-        + '  ' + nfcBlock
+        + '  <p style="margin-top:12px"><strong>Grabá una etiqueta NFC en blanco</strong> (NTAG213/215/216):</p>'
+        + '  <button class="btn" id="writeBtn">📶 Grabar etiqueta ahora</button>'
+        + '  <div class="status center" id="writeStatus"></div>'
+        + '  <details style="margin-top:10px"><summary>¿No arranca la grabación? / Estoy en iPhone</summary>'
+        + '    <p>La grabación por navegador solo funciona en <strong>Chrome para Android 8+</strong>. En iPhone o Chrome muy viejo:</p>'
+        + '    <ol>'
+        + '      <li>Instalá gratis <strong>NFC Tools</strong> (Android/iPhone) o usá <strong>Atajos</strong> de Apple.</li>'
+        + '      <li>Elegí "Escribir" → "URL" y pegá el enlace de abajo.</li>'
+        + '      <li>Apoyá la etiqueta y listo.</li>'
+        + '    </ol>'
+        + '    <label>Enlace para pegar en la etiqueta</label>'
+        + '    <div class="mono" id="tagUrlBox"></div>'
+        + '    <button class="btn ghost" id="copyTag" style="margin-top:10px">Copiar enlace</button>'
+        + '  </details>'
         + '</div>'
 
         + '<div class="card">'
         + '  <h2><span class="step">4</span> Probá que suene</h2>'
-        + '  <p>Primero suscribite en ntfy (paso 2). Después:</p>'
+        + '  <p>Primero suscribite / instalá la app (paso 2). Después tocá:</p>'
         + '  <button class="btn ghost" id="testBtn">🔔 Enviar timbre de prueba</button>'
         + '  <div class="status center" id="testStatus"></div>'
         + '</div>'
@@ -181,29 +231,57 @@
       openNtfy.href = subUrl(t);
       document.getElementById("qrSub").innerHTML = qrSvg(subUrl(t));
       document.getElementById("qrTag").innerHTML = qrSvg(tagUrl(t));
+      document.getElementById("tagUrlBox").textContent = tagUrl(t);
 
-      var tagBox = document.getElementById("tagUrlBox");
-      if (tagBox) tagBox.textContent = tagUrl(t);
-
-      // Copiar URL de la etiqueta (iPhone)
-      var copyTag = document.getElementById("copyTag");
-      if (copyTag) copyTag.addEventListener("click", function () {
-        navigator.clipboard && navigator.clipboard.writeText(tagUrl(t));
-        copyTag.textContent = "¡Copiado!";
-        setTimeout(function(){ copyTag.textContent = "Copiar URL de la etiqueta"; }, 1500);
+      // Copiar URL de la etiqueta (siempre disponible)
+      document.getElementById("copyTag").addEventListener("click", function () {
+        var btn = this;
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(tagUrl(t)).then(function () {
+            btn.textContent = "¡Copiado!";
+            setTimeout(function(){ btn.textContent = "Copiar enlace"; }, 1500);
+          });
+        } else {
+          // fallback: seleccionar
+          var range = document.createRange();
+          range.selectNode(document.getElementById("tagUrlBox"));
+          window.getSelection().removeAllRanges();
+          window.getSelection().addRange(range);
+        }
       });
 
-      // Grabar por Web NFC (Android Chrome)
-      var writeBtn = document.getElementById("writeBtn");
-      if (writeBtn) writeBtn.addEventListener("click", function () {
+      // Grabar por Web NFC — botón SIEMPRE visible; detecta al hacer click.
+      document.getElementById("writeBtn").addEventListener("click", function () {
         var st = document.getElementById("writeStatus");
-        st.className = "status center"; st.textContent = "Acercá la etiqueta al teléfono…";
+        st.className = "status center";
+
+        if (!("NDEFReader" in window)) {
+          st.className = "status center err";
+          if (isIOS) {
+            st.innerHTML = "En iPhone no se puede grabar desde el navegador. Usá <strong>NFC Tools</strong> o <strong>Atajos</strong> — abrí «¿No arranca la grabación?» acá arriba.";
+          } else if (!isAndroid) {
+            st.innerHTML = "Este navegador no soporta grabación NFC. Probá desde <strong>Chrome en un Android</strong>.";
+          } else {
+            st.innerHTML = "Tu Chrome no permite grabar NFC. Actualizalo, o probá con <strong>NFC Tools</strong> (link arriba).";
+          }
+          return;
+        }
+        st.textContent = "Acercá la etiqueta al teléfono…";
         try {
           var writer = new NDEFReader();
           writer.write({ records: [{ recordType: "url", data: tagUrl(t) }] })
-            .then(function () { st.className = "status center ok"; st.textContent = "✅ ¡Etiqueta grabada! Pegala en la puerta."; })
-            .catch(function (e) { st.className = "status center err"; st.textContent = "No se pudo grabar: " + e.message; });
-        } catch (e) { st.className = "status center err"; st.textContent = "Error: " + e.message; }
+            .then(function () {
+              st.className = "status center ok";
+              st.textContent = "✅ ¡Etiqueta grabada! Pegala en la puerta.";
+            })
+            .catch(function (e) {
+              st.className = "status center err";
+              st.textContent = "No se pudo grabar: " + e.message;
+            });
+        } catch (e) {
+          st.className = "status center err";
+          st.textContent = "Error: " + e.message;
+        }
       });
 
       // Probar

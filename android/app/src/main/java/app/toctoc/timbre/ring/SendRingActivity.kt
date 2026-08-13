@@ -57,13 +57,21 @@ class SendRingActivity : ComponentActivity() {
                             //  - Relay/FCM: llega con la app cerrada / teléfono dormido.
                             //  - ntfy: back-up para versiones sideload que aún escuchan
                             //    por servicio en primer plano.
-                            // Basta con que UNA tenga éxito.
                             val msg = "Alguien está tocando el timbre de $name"
                             val results = listOf(
                                 async { Relay.ring(topic, name) },
                                 async { Ntfy.publish(server, topic, msg, name) }
                             ).awaitAll()
-                            onDone(results.any { it.isSuccess })
+                            val relayOk = results[0].isSuccess
+                            val ntfyOk = results[1].isSuccess
+                            // Enviamos el detalle al UI para poder diagnosticar
+                            // por qué el timbre no suena en algún teléfono viejo.
+                            val detail = buildString {
+                                append(if (relayOk) "FCM ✓" else "FCM ✗: ${results[0].exceptionOrNull()?.message ?: "?"}")
+                                append(" | ")
+                                append(if (ntfyOk) "ntfy ✓" else "ntfy ✗: ${results[1].exceptionOrNull()?.message ?: "?"}")
+                            }
+                            onDone(relayOk || ntfyOk, detail)
                         }
                     }
                 )
@@ -78,16 +86,20 @@ private enum class RingUi { Idle, Sending, Ok, Error, Invalid }
 private fun SendRingScreen(
     topic: String,
     doorbellName: String,
-    onRing: ((Boolean) -> Unit) -> Unit
+    onRing: ((Boolean, String) -> Unit) -> Unit
 ) {
     var state by remember {
         mutableStateOf(if (topic.isBlank()) RingUi.Invalid else RingUi.Idle)
     }
+    var lastDetail by remember { mutableStateOf("") }
 
     fun ring() {
         if (topic.isBlank()) { state = RingUi.Invalid; return }
         state = RingUi.Sending
-        onRing { ok -> state = if (ok) RingUi.Ok else RingUi.Error }
+        onRing { ok, detail ->
+            lastDetail = detail
+            state = if (ok) RingUi.Ok else RingUi.Error
+        }
     }
 
     // Toca automáticamente al abrir desde la etiqueta
@@ -136,6 +148,17 @@ private fun SendRingScreen(
                 },
                 color = Color(0xE6FFFFFF), fontSize = 16.sp, textAlign = TextAlign.Center
             )
+            // Diagnóstico: cuál canal entregó / falló. Ayuda a explicar por qué
+            // un teléfono viejo abre esta pantalla pero el dueño no recibe.
+            if ((state == RingUi.Ok || state == RingUi.Error) && lastDetail.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    lastDetail,
+                    color = Color(0x99FFFFFF),
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
             Spacer(Modifier.height(36.dp))
             if (state == RingUi.Sending) {
                 CircularProgressIndicator(color = Color.White)
