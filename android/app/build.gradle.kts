@@ -9,17 +9,17 @@ plugins {
 
 // ---- App version. Bump these two on every release. ----
 // versionCode MUST strictly increase; the in-app updater compares it.
-val appVersionCode = 15
-val appVersionName = "1.0.14"
+val appVersionCode = 16
+val appVersionName = "1.0.15"
 
 android {
     namespace = "app.toctoc.timbre"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.toctoc.timbre"
         minSdk = 24          // Android 7.0 -> maximiza el rango de dispositivos
-        targetSdk = 35       // Android 15
+        targetSdk = 36       // Android 16 (requerido por Google Play desde 2026)
         versionCode = appVersionCode
         versionName = appVersionName
 
