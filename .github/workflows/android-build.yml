@@ -41,10 +41,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
-        run: |
-          yes | sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" >/dev/null
+        with:
+          # 'tools' fue deprecado y setup-android@v3 lo intenta instalar por
+          # defecto, lo que hace fallar la instalación con exit code 1.
+          # Le decimos exactamente qué instalar → skip 'tools'.
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
