@@ -54,9 +54,9 @@ fun RingScreen(message: String, onDismiss: () -> Unit) {
             }
             Spacer(Modifier.height(32.dp))
             Text(
-                "¡Están tocando el timbre!",
+                "¡Llegaron!",
                 color = Color.White,
-                fontSize = 26.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
@@ -64,7 +64,7 @@ fun RingScreen(message: String, onDismiss: () -> Unit) {
             Text(
                 message,
                 color = Color(0xCCFFFFFF),
-                fontSize = 16.sp,
+                fontSize = 17.sp,
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(48.dp))
@@ -79,7 +79,7 @@ fun RingScreen(message: String, onDismiss: () -> Unit) {
                     .fillMaxWidth()
                     .height(64.dp)
             ) {
-                Text("Silenciar", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Entendido", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

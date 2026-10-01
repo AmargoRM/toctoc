@@ -30,34 +30,65 @@ class TocTocApp : Application() {
         }
         nm.createNotificationChannel(service)
 
-        val attrs = AudioAttributes.Builder()
+        // Dos variantes por tono: notificación normal y alarma (bypass silencio).
+        //  - Ring: suena en el stream de ringtone, respeta modo silencio.
+        //  - Alarm: suena en el stream de alarma + bypass DND, salta el modo
+        //    silencio y vibrador (equivalente a un despertador).
+        // Los canales son INMUTABLES: cada perfil necesita su propio ID.
+        val ringAttrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
+        val alarmAttrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
 
-        // Un canal por tono, CADA UNO CON SU SONIDO. Así el timbre suena aunque
-        // no se abra la pantalla completa (p. ej. sin permiso de full-screen,
-        // cuando el push llega con la app cerrada).
         Ringtones.all.forEach { tone ->
-            val ch = NotificationChannel(
+            val soundUri = Uri.parse("android.resource://$packageName/${tone.res}")
+
+            val ring = NotificationChannel(
                 ringChannelId(tone.id),
                 "Timbre — ${tone.label}",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Alerta cuando alguien toca el timbre"
+                description = "Alerta cuando llega un aviso de ${tone.label}"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
                 setBypassDnd(true)
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                setSound(Uri.parse("android.resource://$packageName/${tone.res}"), attrs)
+                setSound(soundUri, ringAttrs)
             }
-            nm.createNotificationChannel(ch)
+            nm.createNotificationChannel(ring)
+
+            val alarm = NotificationChannel(
+                alarmChannelId(tone.id),
+                "Alarma — ${tone.label}",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description =
+                    "Suena fuerte aunque el teléfono esté en silencio (${tone.label})"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
+                setBypassDnd(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setSound(soundUri, alarmAttrs)
+            }
+            nm.createNotificationChannel(alarm)
         }
     }
 
     companion object {
         const val CHANNEL_SERVICE = "toctoc_service"
-        // Un canal por tono (v3), cada uno con su sonido incorporado.
+
+        /** Canal "normal" para un tono. Respeta el modo silencio del teléfono. */
         fun ringChannelId(toneId: String): String = "toctoc_ring_${toneId}_v3"
+
+        /** Canal "alarma": suena aunque el teléfono esté en silencio. */
+        fun alarmChannelId(toneId: String): String = "toctoc_alarm_${toneId}_v1"
+
+        /** Elige canal según la preferencia de "forzar en silencio". */
+        fun channelFor(toneId: String, forceSoundInSilent: Boolean): String =
+            if (forceSoundInSilent) alarmChannelId(toneId) else ringChannelId(toneId)
     }
 }

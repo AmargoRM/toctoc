@@ -13,7 +13,7 @@ import androidx.core.app.NotificationCompat
 import app.toctoc.timbre.MainActivity
 import app.toctoc.timbre.R
 import app.toctoc.timbre.TocTocApp
-import app.toctoc.timbre.data.Links
+import app.toctoc.timbre.data.Ringtones
 import app.toctoc.timbre.data.SettingsRepository
 import app.toctoc.timbre.ring.RingActivity
 import org.json.JSONObject
@@ -25,8 +25,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.HttpsURLConnection
 
 /**
- * Servicio en primer plano que mantiene una conexión de larga duración con el
- * stream de ntfy. Cuando llega un mensaje, dispara el timbre a pantalla completa.
+ * Servicio en primer plano que mantiene una conexión de larga duración con ntfy.
+ * Suscribe a TODOS los topics habilitados en una sola conexión (ntfy acepta
+ * topics coma-separados en la URL) y, al llegar un mensaje, dispara el aviso
+ * a pantalla completa usando el tono del timbre que corresponda.
+ *
+ * Solo relevante en el flavor sideload; en Play la entrega es 100% FCM.
  */
 class RingListenerService : Service() {
 
@@ -51,16 +55,10 @@ class RingListenerService : Service() {
         super.onDestroy()
     }
 
-    /**
-     * Cuando el usuario cierra la app (swipe en recientes), el sistema puede
-     * detener el servicio. Reprogramamos su reinicio para seguir escuchando.
-     * (Mejor esfuerzo: en Android 12+ el reinicio en segundo plano puede estar
-     * limitado por el sistema; la solución definitiva y confiable es FCM.)
-     */
     override fun onTaskRemoved(rootIntent: Intent?) {
         try {
-            val settings = SettingsRepository(applicationContext).snapshot()
-            if (settings.listening && settings.topic.isNotBlank()) {
+            val s = SettingsRepository(applicationContext).snapshot()
+            if (s.listening && s.doorbells.any { it.enabled }) {
                 val restart = Intent(applicationContext, RingListenerService::class.java)
                 val pi = PendingIntent.getService(
                     this, 1, restart,
@@ -94,49 +92,54 @@ class RingListenerService : Service() {
                     startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
                     startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-                else ->
-                    startForeground(NOTIF_ID, notif)
+                else -> startForeground(NOTIF_ID, notif)
             }
-        } catch (_: Exception) {
-            // p. ej. ForegroundServiceStartNotAllowedException al reiniciar en
-            // segundo plano en Android 12+. Evitamos que tire la app.
-        }
+        } catch (_: Exception) { /* ForegroundServiceStartNotAllowed en Android 12+ */ }
     }
 
     private fun listenLoop() {
         val repo = SettingsRepository(applicationContext)
         var backoffMs = 2_000L
+        var currentTopics: List<String> = emptyList()
         while (running.get()) {
-            val settings = try { repo.snapshot() } catch (_: Exception) { null }
-            val topic = settings?.topic
-            if (settings == null || topic.isNullOrBlank()) {
+            val s = try { repo.snapshot() } catch (_: Exception) { null }
+            val topics = s?.doorbells?.filter { it.enabled }?.map { it.topic }?.filter { it.isNotBlank() }
+                ?: emptyList()
+            if (s == null || topics.isEmpty()) {
                 sleepQuiet(3_000); continue
             }
+            // Si la lista cambió, cerrá la conexión para re-abrir con las nuevas.
+            if (topics != currentTopics) {
+                try { connection?.disconnect() } catch (_: Exception) {}
+                currentTopics = topics
+            }
             try {
-                val url = URL(Links.jsonStreamUrl(settings.ntfyServer, topic))
+                val joined = topics.joinToString(",")
+                val url = URL("${s.ntfyServer.trimEnd('/')}/$joined/json")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 15_000
-                    // ntfy manda keepalive cada ~45s; si en 70s no llega nada,
-                    // asumimos conexión muerta y reconectamos.
                     readTimeout = 70_000
                     requestMethod = "GET"
                     setRequestProperty("Accept", "application/x-ndjson")
-                    if (this is HttpsURLConnection) { /* usa el trust store del sistema */ }
+                    if (this is HttpsURLConnection) { /* trust store del sistema */ }
                     connect()
                 }
                 connection = conn
                 if (conn.responseCode !in 200..299) {
                     conn.disconnect(); sleepQuiet(backoffMs); backoffMs = nextBackoff(backoffMs); continue
                 }
-                backoffMs = 2_000L // conexión OK, reinicia backoff
+                backoffMs = 2_000L
                 BufferedReader(InputStreamReader(conn.inputStream)).use { reader ->
                     while (running.get()) {
                         val line = reader.readLine() ?: break
-                        handleLine(line)
+                        handleLine(line, s)
+                        // Si cambió la lista mientras leíamos, salimos para reconectar
+                        val newTopics = try { repo.snapshot().doorbells.filter { it.enabled }.map { it.topic } } catch (_: Exception) { topics }
+                        if (newTopics != currentTopics) break
                     }
                 }
             } catch (_: Exception) {
-                // se cayó la conexión: reintenta con backoff
+                // Conexión caída: reintenta con backoff
             } finally {
                 try { connection?.disconnect() } catch (_: Exception) {}
                 connection = null
@@ -145,20 +148,24 @@ class RingListenerService : Service() {
         }
     }
 
-    private fun handleLine(line: String?) {
+    private fun handleLine(line: String?, settings: app.toctoc.timbre.data.TocTocSettings) {
         val text = line?.trim().orEmpty()
         if (text.isEmpty()) return
         try {
             val obj = JSONObject(text)
-            when (obj.optString("event")) {
-                "message" -> triggerRing(obj.optString("message", "").ifBlank { "Alguien está en la puerta" })
-                // "open", "keepalive", "poll_request" -> ignorar
+            if (obj.optString("event") != "message") return
+            val topic = obj.optString("topic")
+            val doorbell = topic.takeIf { it.isNotBlank() }?.let { settings.byTopic(it) }
+            val msg = obj.optString("message", "").ifBlank {
+                doorbell?.let { "Alguien llegó a ${it.name}" } ?: "Alguien llegó"
             }
-        } catch (_: Exception) { /* línea no-JSON, ignorar */ }
-    }
-
-    private fun triggerRing(message: String) {
-        RingActivity.start(applicationContext, message)
+            RingActivity.start(
+                applicationContext,
+                msg,
+                doorbell?.ringtone ?: Ringtones.DEFAULT_ID,
+                settings.forceSoundInSilent
+            )
+        } catch (_: Exception) { /* línea no-JSON */ }
     }
 
     private fun sleepQuiet(ms: Long) {

@@ -15,8 +15,8 @@ class BootReceiver : BroadcastReceiver() {
         if (action == Intent.ACTION_BOOT_COMPLETED ||
             action == Intent.ACTION_MY_PACKAGE_REPLACED
         ) {
-            val settings = try { SettingsRepository(context).snapshot() } catch (_: Exception) { null }
-            if (settings?.listening == true && settings.topic.isNotBlank()) {
+            val s = try { SettingsRepository(context).snapshot() } catch (_: Exception) { null }
+            if (s?.listening == true && s.doorbells.any { it.enabled }) {
                 try { RingListenerService.start(context) } catch (_: Exception) {}
             }
         }

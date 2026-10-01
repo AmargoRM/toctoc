@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#3F51B5" />
-<title>Upe timbre — Creá tu timbre</title>
+<title>Upe timbre — Creá tu aviso de llegada</title>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -14,7 +14,7 @@
     background: linear-gradient(160deg, #3F51B5, #283593);
     color: #fff; min-height: 100%; padding: 26px 18px 52px; text-align: center;
   }
-  .wrap { max-width: 480px; margin: 0 auto; }
+  .wrap { max-width: 520px; margin: 0 auto; }
   .bell { font-size: 58px; filter: drop-shadow(0 8px 18px rgba(0,0,0,.35)); }
   h1 { font-size: 23px; margin: 12px 0 6px; font-weight: 800; }
   .sub { opacity: .9; font-size: 15px; margin: 0 0 18px; }
@@ -23,7 +23,7 @@
     margin: 14px 0; text-align: left;
   }
   .card h2 { font-size: 16px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
-  .card p { font-size: 13.5px; opacity: .9; margin: 6px 0; }
+  .card p { font-size: 13.5px; opacity: .95; margin: 6px 0; }
   .step { display: inline-flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #283593;
     font-weight: 800; font-size: 14px; flex: 0 0 auto; }
@@ -40,6 +40,7 @@
   .btn:active { transform: translateY(1px); }
   .btn:disabled { opacity:.6; }
   .btn.ghost { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.55); box-shadow:none; font-size:15px; }
+  .btn.danger { background: transparent; color: #FFD2D2; border: 1px solid rgba(255,210,210,.5); box-shadow:none; font-size:13px; padding: 8px 12px; }
   .row { display:flex; gap:10px; } .row > * { flex:1; }
   .qrbox { background:#fff; border-radius:14px; padding:12px; display:inline-block; margin:8px auto 2px; }
   .qrbox svg { display:block; width:190px; height:190px; }
@@ -60,38 +61,40 @@
   ol { padding-left: 22px; margin: 6px 0; } ol li { margin: 4px 0; font-size: 13.5px; }
   .warn { background: rgba(255, 170, 40, .18); border: 1px solid rgba(255, 170, 40, .5);
     border-radius: 10px; padding: 10px 12px; font-size: 13px; margin: 10px 0; }
+  .doorbell-item { background: rgba(255,255,255,.07); border-radius: 14px; padding: 14px;
+    margin: 8px 0; display:flex; align-items:center; gap:12px; }
+  .doorbell-item .meta { flex:1; min-width:0; }
+  .doorbell-item h3 { margin:0; font-size:15px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .doorbell-item .topic { font-size:11px; opacity:.6; font-family: ui-monospace, monospace; }
+  .doorbell-item button { background: rgba(255,255,255,.15); color:#fff; border:none;
+    border-radius: 10px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+  .doorbell-item .pill-small { font-size:10px; padding:2px 8px; }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="bell">🔔</div>
-    <h1>Creá tu timbre NFC</h1>
-    <p class="sub">Sin cuenta y sin instalar nada obligatorio. Funciona en <strong>iPhone</strong> y Android.</p>
+    <div class="bell">📍🔔</div>
+    <h1>Creá tu aviso de llegada</h1>
+    <p class="sub">Avisá cuando llegaste a casa, al trabajo, al auto…<br>
+      Funciona en <strong>iPhone</strong> y Android, sin cuenta y sin instalar nada obligatorio.</p>
 
-    <!-- Paso inicial: crear -->
-    <div id="create" class="card hidden">
-      <h2><span class="step">1</span> Ponele un nombre</h2>
-      <p>Es para reconocer tu timbre (ej. Casa, Depto 4B, Oficina).</p>
-      <label for="name">Nombre del timbre</label>
-      <input type="text" id="name" placeholder="Mi casa" maxlength="40" />
-      <button class="btn" id="createBtn">Crear mi timbre</button>
-      <p class="muted">Se genera un identificador único y privado. Queda guardado en este teléfono.</p>
-    </div>
+    <!-- Lista + alta -->
+    <div id="listView"></div>
 
-    <!-- Panel del timbre creado -->
+    <!-- Panel de un timbre seleccionado -->
     <div id="panel" class="hidden"></div>
   </div>
 
   <script src="qrcode.js"></script>
   <script>
   (function () {
-    var STORE_KEY = "toctoc_timbre_v1";
+    var STORE_KEY_LIST = "upe_doorbells_v1";
+    var STORE_KEY_LEGACY = "toctoc_timbre_v1";
     var SERVER = "https://ntfy.sh";
     var ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
 
-    var elCreate = document.getElementById("create");
+    var elList = document.getElementById("listView");
     var elPanel = document.getElementById("panel");
-    var elName = document.getElementById("name");
 
     // Base de la página del timbre (…/timbre/), relativa → sobrevive renombres del repo.
     var ringBase = new URL("../", location.href).href;      // …/timbre/
@@ -103,9 +106,35 @@
       for (var i = 0; i < 12; i++) s += ALPHABET[arr[i] % ALPHABET.length];
       return s;
     }
+    function uuid() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+        var r = Math.random()*16|0; var v = c=='x'?r:(r&0x3|0x8); return v.toString(16);
+      });
+    }
 
-    function load() { try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { return null; } }
-    function save(o) { try { localStorage.setItem(STORE_KEY, JSON.stringify(o)); } catch (e) {} }
+    function loadList() {
+      try {
+        var raw = localStorage.getItem(STORE_KEY_LIST);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+      // Migración: si había un timbre v1, lo convertimos en la primera entrada
+      try {
+        var legacy = JSON.parse(localStorage.getItem(STORE_KEY_LEGACY));
+        if (legacy && legacy.topic) {
+          var migrated = [{
+            id: uuid(), topic: legacy.topic, name: legacy.name || "Mi casa",
+            created: legacy.created || Date.now()
+          }];
+          saveList(migrated);
+          try { localStorage.removeItem(STORE_KEY_LEGACY); } catch (e) {}
+          return migrated;
+        }
+      } catch (e) {}
+      return [];
+    }
+    function saveList(list) {
+      try { localStorage.setItem(STORE_KEY_LIST, JSON.stringify(list)); } catch (e) {}
+    }
 
     function tagUrl(t) {
       return ringBase + "?t=" + encodeURIComponent(t.topic)
@@ -119,11 +148,10 @@
     }
 
     function publishTest(t) {
-      // priority=5 (max) para que ntfy dispare la notificación más intrusiva
-      // que el sistema permita (respeta modos "no molestar" / "urgent").
-      var url = subUrl(t) + "?title=" + encodeURIComponent(t.name)
+      // priority=5 (max) + tags para que ntfy dispare la notificación más intrusiva posible.
+      var url = subUrl(t) + "?title=" + encodeURIComponent("Alguien llegó a " + t.name)
         + "&tags=bell,rotating_light&priority=5";
-      return fetch(url, { method: "POST", body: "🔔 Prueba de timbre (" + t.name + ")" });
+      return fetch(url, { method: "POST", body: "📍 Prueba — llegada a " + t.name });
     }
 
     var iosStore = "https://apps.apple.com/app/ntfy/id1625396347";
@@ -133,19 +161,85 @@
     var isIOS = /iPhone|iPad|iPod/i.test(ua);
     var isAndroid = /Android/i.test(ua);
 
-    function renderPanel(t) {
-      elCreate.classList.add("hidden");
+    // -------------- Render lista + alta --------------
+    function renderList() {
+      var list = loadList();
+      elPanel.classList.add("hidden"); elPanel.innerHTML = "";
+      elList.classList.remove("hidden");
+
+      var html =
+        '<div class="card">'
+        + '  <h2>📍 Tus avisos de llegada</h2>'
+        + '  <p>Cada timbre es un <strong>lugar</strong>: casa, trabajo, auto, etc. Programás un NFC en cada lugar, y al tocarlo el teléfono avisa <strong>«Llegué a casa»</strong>, <strong>«Llegué al trabajo»</strong>, lo que sea.</p>';
+
+      if (list.length === 0) {
+        html += '  <p class="muted">Todavía no tenés ninguno. Creá el primero más abajo.</p>';
+      } else {
+        html += '<div style="margin-top:10px">';
+        list.forEach(function(t, i){
+          html +=
+            '<div class="doorbell-item" data-id="' + t.id + '">'
+            + '  <div class="meta">'
+            + '    <h3>📍 ' + escapeHtml(t.name) + '</h3>'
+            + '    <div class="topic">' + t.topic + '</div>'
+            + '  </div>'
+            + '  <button data-action="open" data-id="' + t.id + '">Abrir</button>'
+            + '</div>';
+        });
+        html += '</div>';
+      }
+
+      html += '</div>'
+        + '<div class="card">'
+        + '  <h2><span class="step">+</span> Crear un timbre nuevo</h2>'
+        + '  <p>Es para distinguirlo (ej. Casa, Depto 4B, Auto, Oficina).</p>'
+        + '  <label for="name">Nombre del lugar</label>'
+        + '  <input type="text" id="name" placeholder="Mi casa" maxlength="40" />'
+        + '  <button class="btn" id="createBtn">Crear timbre</button>'
+        + '  <p class="muted">Se genera un identificador único y privado. Queda guardado en este teléfono.</p>'
+        + '</div>';
+
+      elList.innerHTML = html;
+
+      // Delegación de clicks para abrir cards
+      elList.querySelectorAll('[data-action="open"]').forEach(function(btn){
+        btn.addEventListener("click", function(){
+          var id = this.getAttribute("data-id");
+          var t = loadList().find(function(x){ return x.id === id; });
+          if (t) openDoorbell(t);
+        });
+      });
+
+      // Crear
+      var elCreateBtn = document.getElementById("createBtn");
+      var elName = document.getElementById("name");
+      elCreateBtn.addEventListener("click", function(){
+        var name = (elName.value || "").trim() || ("Mi lugar " + ((loadList().length + 1)));
+        var t = { id: uuid(), topic: genTopic(), name: name, server: SERVER, created: Date.now() };
+        var list = loadList(); list.push(t); saveList(list);
+        openDoorbell(t);
+      });
+    }
+
+    // -------------- Render de un timbre --------------
+    function openDoorbell(t) {
+      elList.classList.add("hidden");
       elPanel.classList.remove("hidden");
 
       elPanel.innerHTML =
-        '<div class="card center">'
-        + '  <div style="font-size:15px">Tu timbre: <strong id="pName"></strong></div>'
+        '<div class="card">'
+        + '  <button class="btn ghost" id="backBtn">← Volver a la lista</button>'
+        + '</div>'
+
+        + '<div class="card center">'
+        + '  <div style="font-size:15px">Timbre: <strong id="pName"></strong></div>'
         + '  <div class="pill">tema: <span id="pTopic" class="mono" style="background:none;padding:0"></span></div>'
+        + '  <div style="margin-top:10px"><button class="btn danger" id="deleteBtn">Eliminar este timbre</button></div>'
         + '</div>'
 
         + '<div class="card">'
-        + '  <h2><span class="step">2</span> Recibí el aviso en tu teléfono</h2>'
-        + '  <p>Elegí cómo querés recibir el timbre en tu teléfono. La opción con'
+        + '  <h2><span class="step">1</span> Recibí el aviso en tu teléfono</h2>'
+        + '  <p>Elegí cómo querés recibir el aviso cuando alguien toque la etiqueta. La opción con'
         + '     alarma más fuerte es <strong>Upe timbre</strong> (Android).</p>'
         + '  <div class="row" style="margin-top:8px">'
         + '    <a class="btn" href="' + upeStore + '" target="_blank" rel="noopener">🔔 Upe timbre (Android)</a>'
@@ -162,50 +256,64 @@
         + '  <p class="muted">Nombre del tema: <span class="mono" id="topicInline" style="background:none;padding:0"></span></p>'
         + '</div>'
 
-        // === NUEVA SECCIÓN: sonido de alarma en ntfy ===
         + '<div class="card">'
-        + '  <h2>🔊 Sonido tipo alarma (que despierte)</h2>'
-        + '  <p>Por defecto ntfy hace un "ding" tranquilo. Si querés que suene <strong>tipo despertador</strong> aunque el teléfono esté en silencio, hay que configurarlo en la app de ntfy. Elegí tu plataforma:</p>'
-        + '  <details><summary>🤖 En Android (ntfy)</summary>'
+        + '  <h2>🔊 Que suene fuerte como timbre / despertador</h2>'
+        + '  <p>Por defecto ntfy hace un "ding" suave. Para que suene fuerte como un timbre o despertador, hay que configurarlo. Elegí tu plataforma:</p>'
+        + '  <details><summary>🍎 En iPhone — ntfy + tono de timbre</summary>'
+        + '    <p><strong>Opción A — Cambiar el sonido de la notificación (lo más simple):</strong></p>'
         + '    <ol>'
-        + '      <li>Abrí <strong>ntfy</strong> → mantené <strong>presionado</strong> tu suscripción (el tema del timbre).</li>'
-        + '      <li>Tocá <strong>Editar</strong> → <strong>Sound</strong> (Sonido).</li>'
-        + '      <li>Elegí <strong>Alarm</strong> u otro sonido fuerte del sistema.</li>'
-        + '      <li>Volvé, tocá <strong>Notifications</strong> (o el ícono de la campana) → <strong>Priority</strong>: <strong>Max</strong>.</li>'
-        + '      <li>En Ajustes del sistema → Notificaciones de ntfy → subí volumen y desactivá <em>No molestar</em> para esa categoría.</li>'
+        + '      <li>Abrí <strong>ntfy</strong> y suscribite al tema del timbre (botón de arriba).</li>'
+        + '      <li>Tocá la suscripción → <strong>editar</strong> (ícono lápiz, arriba a la derecha).</li>'
+        + '      <li>En <strong>Sound</strong> elegí un tono fuerte (ej. <em>Juntos</em>, <em>Alarma</em>, <em>Reflexión</em>).</li>'
         + '    </ol>'
-        + '    <p class="muted">Con esto el timbre suena fuerte y persistente aunque el teléfono esté bloqueado.</p>'
+        + '    <p><strong>Opción B — Que suene aunque esté en silencio (requiere Atajos):</strong></p>'
+        + '    <ol>'
+        + '      <li>Instalá la app <strong>Atajos</strong> (viene con iOS).</li>'
+        + '      <li>Abrí Atajos → <strong>Automatización</strong> → <em>+</em> → <strong>«Al recibir una notificación»</strong>.</li>'
+        + '      <li>Elegí <strong>ntfy</strong> como la app. Desactivá "Preguntar antes".</li>'
+        + '      <li>Añadí la acción <strong>Reproducir sonido</strong> (de la Biblioteca de Música, un timbre de 30s loop). O <strong>Vibrar dispositivo</strong>.</li>'
+        + '      <li>Guardá. Ahora cada notificación de ntfy dispara el sonido fuerte.</li>'
+        + '    </ol>'
+        + '    <p><strong>Opción C — Alertas críticas (lo más potente):</strong></p>'
+        + '    <ol>'
+        + '      <li>Ajustes de iOS → <strong>Notificaciones</strong> → <strong>ntfy</strong>.</li>'
+        + '      <li>Activá <strong>Alertas urgentes/críticas</strong> y <strong>Sonidos</strong>.</li>'
+        + '      <li>Esto hace que suene aunque el iPhone esté en silencio o en No Molestar.</li>'
+        + '    </ol>'
+        + '    <p class="warn">iOS limita que apps terceras suenen como alarma real. La combinación B+C es lo más cerca que se puede llegar.</p>'
         + '  </details>'
-        + '  <details><summary>🍎 En iPhone (ntfy)</summary>'
+        + '  <details><summary>🤖 En Android — ntfy</summary>'
         + '    <ol>'
-        + '      <li>Abrí <strong>ntfy</strong> → suscribite al tema si aún no lo hiciste.</li>'
-        + '      <li>Andá a <strong>Ajustes de iOS → Notificaciones → ntfy</strong>.</li>'
-        + '      <li>Activá <strong>Alertas críticas</strong> (dentro de "Aviso urgente" o similar) y <strong>Sonidos</strong>.</li>'
-        + '      <li>Prioridad se envía como <code>priority=5</code> desde acá — así iOS lo trata como "Time Sensitive".</li>'
+        + '      <li>Abrí <strong>ntfy</strong> → <strong>mantené presionada</strong> tu suscripción.</li>'
+        + '      <li>Tocá <strong>Editar</strong> → <strong>Sound</strong>.</li>'
+        + '      <li>Elegí <strong>Alarm</strong> u otro sonido fuerte del sistema.</li>'
+        + '      <li>Volvé → tocá <strong>Notifications</strong> → <strong>Priority</strong>: <strong>Max</strong>.</li>'
+        + '      <li>En Ajustes → Notificaciones de ntfy → subí volumen y permitile saltar <em>No molestar</em>.</li>'
         + '    </ol>'
-        + '    <p><strong>Para que suene como despertador</strong> (más fuerte todavía) hay dos trucos:</p>'
-        + '    <ol>'
-        + '      <li><strong>Atajos → Automatización</strong>: creá una automatización personal <em>"Al abrir la app ntfy"</em> → acción <strong>Reproducir sonido</strong> con un tono de alarma del sistema. Cada vez que llega un timbre y abrís ntfy, dispara la alarma.</li>'
-        + '      <li>Alternativa avanzada: crear una automatización con <em>Alarm</em> nativa vía Atajos — ver más info en <a href="https://ntfy.sh/docs/subscribe/phone/#iphoneipad" target="_blank" rel="noopener">docs ntfy iOS</a>.</li>'
-        + '    </ol>'
-        + '    <p class="warn">Nota: iOS bloquea que apps de terceros suenen como alarma real (bug bypass). El botón "Probar" de acá abajo envía prioridad máxima; si igual suena bajito, revisá los pasos de arriba.</p>'
+        + '    <p class="muted">Con esto suena fuerte y persistente aunque esté bloqueado.</p>'
+        + '  </details>'
+        + '  <details><summary>⚡ Lo mejor: usá <strong>Upe timbre</strong> (Android)</summary>'
+        + '    <p>La app Upe timbre tiene opción para <strong>sonar aunque esté en silencio</strong> y abre la pantalla a timbre completo. Es nuestra recomendación si tenés Android.</p>'
+        + '    <a class="btn" href="' + upeStore + '" target="_blank" rel="noopener">🔔 Instalar Upe timbre</a>'
         + '  </details>'
         + '</div>'
 
         + '<div class="card">'
-        + '  <h2><span class="step">3</span> Tu etiqueta NFC (para la puerta)</h2>'
-        + '  <p>Cuando alguien la toque, suena tu timbre. Compartí el enlace o escaneá:</p>'
+        + '  <h2><span class="step">2</span> Tu etiqueta NFC (para el lugar)</h2>'
+        + '  <p>Cuando alguien la toque, recibís el aviso. Pegala en la puerta, en el escritorio, donde quieras.</p>'
         + '  <div class="center"><div class="qrbox" id="qrTag"></div></div>'
         + '  <p style="margin-top:12px"><strong>Grabá una etiqueta NFC en blanco</strong> (NTAG213/215/216):</p>'
         + '  <button class="btn" id="writeBtn">📶 Grabar etiqueta ahora</button>'
         + '  <div class="status center" id="writeStatus"></div>'
         + '  <details style="margin-top:10px"><summary>¿No arranca la grabación? / Estoy en iPhone</summary>'
-        + '    <p>La grabación por navegador solo funciona en <strong>Chrome para Android 8+</strong>. En iPhone o Chrome muy viejo:</p>'
+        + '    <p>La grabación por navegador solo funciona en <strong>Chrome para Android 8+</strong>. En iPhone, Safari no permite grabar NFC desde la web:</p>'
         + '    <ol>'
-        + '      <li>Instalá gratis <strong>NFC Tools</strong> (Android/iPhone) o usá <strong>Atajos</strong> de Apple.</li>'
-        + '      <li>Elegí "Escribir" → "URL" y pegá el enlace de abajo.</li>'
-        + '      <li>Apoyá la etiqueta y listo.</li>'
+        + '      <li>Instalá gratis <strong>NFC Tools</strong> (en el App Store o Play Store).</li>'
+        + '      <li>Dentro de la app elegí <strong>Escribir</strong> → <strong>Añadir un registro</strong> → <strong>URL / URI</strong>.</li>'
+        + '      <li>Pegá el enlace de abajo.</li>'
+        + '      <li>Tocá <strong>Grabar / Escribir</strong> y apoyá la etiqueta.</li>'
         + '    </ol>'
+        + '    <p><strong>iPhone — alternativa con Atajos:</strong> en iOS 13+ podés usar la automatización «Al tocar un NFC» de Atajos para disparar la URL cada vez que tocás la etiqueta (sin grabarla).</p>'
         + '    <label>Enlace para pegar en la etiqueta</label>'
         + '    <div class="mono" id="tagUrlBox"></div>'
         + '    <button class="btn ghost" id="copyTag" style="margin-top:10px">Copiar enlace</button>'
@@ -213,15 +321,10 @@
         + '</div>'
 
         + '<div class="card">'
-        + '  <h2><span class="step">4</span> Probá que suene</h2>'
-        + '  <p>Primero suscribite / instalá la app (paso 2). Después tocá:</p>'
-        + '  <button class="btn ghost" id="testBtn">🔔 Enviar timbre de prueba</button>'
+        + '  <h2><span class="step">3</span> Probá que suene</h2>'
+        + '  <p>Primero suscribite / instalá la app (paso 1). Después tocá:</p>'
+        + '  <button class="btn ghost" id="testBtn">📍 Enviar aviso de prueba</button>'
         + '  <div class="status center" id="testStatus"></div>'
-        + '</div>'
-
-        + '<div class="card">'
-        + '  <button class="btn ghost" id="newBtn">Crear otro timbre distinto</button>'
-        + '  <p class="muted center">Este timbre queda guardado en este navegador. Volvé a esta página cuando quieras.</p>'
         + '</div>';
 
       document.getElementById("pName").textContent = t.name;
@@ -233,7 +336,15 @@
       document.getElementById("qrTag").innerHTML = qrSvg(tagUrl(t));
       document.getElementById("tagUrlBox").textContent = tagUrl(t);
 
-      // Copiar URL de la etiqueta (siempre disponible)
+      document.getElementById("backBtn").addEventListener("click", renderList);
+
+      document.getElementById("deleteBtn").addEventListener("click", function(){
+        if (!confirm("¿Eliminar «" + t.name + "»? La etiqueta grabada dejará de funcionar.")) return;
+        var list = loadList().filter(function(x){ return x.id !== t.id; });
+        saveList(list);
+        renderList();
+      });
+
       document.getElementById("copyTag").addEventListener("click", function () {
         var btn = this;
         if (navigator.clipboard) {
@@ -242,7 +353,6 @@
             setTimeout(function(){ btn.textContent = "Copiar enlace"; }, 1500);
           });
         } else {
-          // fallback: seleccionar
           var range = document.createRange();
           range.selectNode(document.getElementById("tagUrlBox"));
           window.getSelection().removeAllRanges();
@@ -250,7 +360,6 @@
         }
       });
 
-      // Grabar por Web NFC — botón SIEMPRE visible; detecta al hacer click.
       document.getElementById("writeBtn").addEventListener("click", function () {
         var st = document.getElementById("writeStatus");
         st.className = "status center";
@@ -258,7 +367,7 @@
         if (!("NDEFReader" in window)) {
           st.className = "status center err";
           if (isIOS) {
-            st.innerHTML = "En iPhone no se puede grabar desde el navegador. Usá <strong>NFC Tools</strong> o <strong>Atajos</strong> — abrí «¿No arranca la grabación?» acá arriba.";
+            st.innerHTML = "En iPhone no se puede grabar desde el navegador. Usá <strong>NFC Tools</strong> o <strong>Atajos</strong> — mirá «¿No arranca la grabación?» acá arriba.";
           } else if (!isAndroid) {
             st.innerHTML = "Este navegador no soporta grabación NFC. Probá desde <strong>Chrome en un Android</strong>.";
           } else {
@@ -272,7 +381,7 @@
           writer.write({ records: [{ recordType: "url", data: tagUrl(t) }] })
             .then(function () {
               st.className = "status center ok";
-              st.textContent = "✅ ¡Etiqueta grabada! Pegala en la puerta.";
+              st.textContent = "✅ ¡Etiqueta grabada! Pegala donde quieras avisar la llegada.";
             })
             .catch(function (e) {
               st.className = "status center err";
@@ -284,43 +393,28 @@
         }
       });
 
-      // Probar
       document.getElementById("testBtn").addEventListener("click", function () {
         var st = document.getElementById("testStatus");
         st.className = "status center"; st.textContent = "Enviando…";
         publishTest(t)
           .then(function (r) {
             if (!r.ok) throw new Error("HTTP " + r.status);
-            st.className = "status center ok"; st.textContent = "✅ Enviado. Fijate la notificación en ntfy.";
+            st.className = "status center ok"; st.textContent = "✅ Enviado. Fijate la notificación en ntfy o Upe timbre.";
           })
           .catch(function (e) { st.className = "status center err"; st.textContent = "No se pudo enviar: " + e.message; });
       });
 
-      // Crear otro
-      document.getElementById("newBtn").addEventListener("click", function () {
-        if (confirm("¿Crear un timbre nuevo? El actual se reemplaza en este navegador.")) {
-          localStorage.removeItem(STORE_KEY);
-          elPanel.classList.add("hidden"); elPanel.innerHTML = "";
-          elCreate.classList.remove("hidden"); elName.value = "";
-        }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function(c) {
+        return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
       });
     }
 
     // ---- init ----
-    var existing = load();
-    if (existing && existing.topic) {
-      renderPanel(existing);
-    } else {
-      elCreate.classList.remove("hidden");
-    }
-
-    document.getElementById("createBtn").addEventListener("click", function () {
-      var name = (elName.value || "").trim() || "Mi casa";
-      var t = { topic: genTopic(), name: name, server: SERVER, created: Date.now() };
-      save(t);
-      renderPanel(t);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
+    renderList();
   })();
   </script>
 </body>

@@ -4,10 +4,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,14 +15,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.toctoc.timbre.BuildConfig
 import app.toctoc.timbre.MainActivity
+import app.toctoc.timbre.data.Doorbell
 import app.toctoc.timbre.data.Ringtones
 import app.toctoc.timbre.update.UpdateState
 import kotlinx.coroutines.launch
@@ -41,19 +42,32 @@ fun MainScreen(
     val settings by vm.settings.collectAsState()
     val updateState by vm.updateState.collectAsState()
     val toast by vm.toast.collectAsState()
+    val focusId by vm.focusDoorbellId.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // Onboarding de permisos: al primer arranque pide notificaciones,
-    // pantalla completa y exclusión de batería en secuencia. Solo se cierra
-    // cuando el usuario los concedió todos (o los saltó desde ajustes).
     var onboardingDone by remember { mutableStateOf(false) }
     if (!onboardingDone) {
         PermissionOnboarding(onFinished = { onboardingDone = true })
     }
 
-    // Reproductor para escuchar una vista previa del tono
+    // Qué cards están expandidas
+    val expanded = remember { mutableStateMapOf<String, Boolean>() }
+    LaunchedEffect(focusId) {
+        focusId?.let {
+            expanded[it] = true
+            vm.clearFocus()
+        }
+    }
+    // Si solo hay uno, lo mostramos expandido por defecto
+    LaunchedEffect(settings.doorbells.size) {
+        if (settings.doorbells.size == 1) {
+            expanded[settings.doorbells.first().id] = true
+        }
+    }
+
+    // Preview player para escuchar un tono (reutilizado entre cards)
     val previewPlayer = remember { mutableStateOf<android.media.MediaPlayer?>(null) }
     fun preview(res: Int) {
         previewPlayer.value?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
@@ -69,6 +83,9 @@ fun MainScreen(
     LaunchedEffect(toast) {
         toast?.let { scope.launch { snackbar.showSnackbar(it) }; vm.clearToast() }
     }
+
+    var showAdd by remember { mutableStateOf(false) }
+    var deleteCandidate by remember { mutableStateOf<Doorbell?>(null) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -90,12 +107,15 @@ fun MainScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ---- Estado del timbre ----
+            // ---- Estado global ----
             ElevatedCard(shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.padding(20.dp)) {
+                    val active = settings.doorbells.count { it.enabled }
+                    val total = settings.doorbells.size
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            if (settings.listening) Icons.Filled.NotificationsActive else Icons.Filled.NotificationsOff,
+                            if (settings.listening) Icons.Filled.NotificationsActive
+                            else Icons.Filled.NotificationsOff,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(32.dp)
@@ -103,12 +123,13 @@ fun MainScreen(
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                if (settings.listening) "Timbre activo" else "Timbre apagado",
+                                if (settings.listening) "Alertas activas" else "Alertas pausadas",
                                 fontSize = 18.sp, fontWeight = FontWeight.Bold
                             )
                             Text(
-                                if (settings.listening) "Recibirás alertas cuando toquen"
-                                else "Activá para empezar a recibir timbres",
+                                if (settings.listening)
+                                    "Escuchando $active de $total timbre${if (total == 1) "" else "s"}"
+                                else "Activá para recibir avisos cuando alguien llegue",
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -121,144 +142,132 @@ fun MainScreen(
                 }
             }
 
-            // ---- Nombre del timbre ----
-            SectionCard(title = "Nombre del timbre", icon = Icons.Filled.Home) {
-                var name by remember(settings.doorbellName) { mutableStateOf(settings.doorbellName) }
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Ej: Casa, Depto 4B, Oficina") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = { vm.setName(name.ifBlank { "Mi puerta" }) },
-                    modifier = Modifier.align(Alignment.End)
-                ) { Text("Guardar") }
-            }
-
-            // ---- Etiqueta NFC ----
-            SectionCard(title = "Tu etiqueta NFC", icon = Icons.Filled.Nfc) {
-                Text(
-                    "Grabá esta información en una etiqueta NFC y pegala en tu puerta. " +
-                        "Cuando alguien la toque con su teléfono, sonará tu timbre.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
-                val url = vm.tagUrl(settings)
-                SelectionRow(label = "Enlace de la etiqueta", value = url)
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { onStartWrite(url) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Filled.Edit, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Grabar etiqueta")
-                    }
-                    OutlinedButton(
-                        onClick = { shareText(context, url) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Filled.Share, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Compartir")
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { vm.testRing() },
-                    modifier = Modifier.fillMaxWidth()
+            // ---- Forzar sonido en silencio ----
+            ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(20.dp)
                 ) {
-                    Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Probar timbre")
+                    Icon(
+                        Icons.Filled.VolumeUp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Sonar aunque esté en silencio", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Usa el canal de alarma: salta el modo silencio como un despertador.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.forceSoundInSilent,
+                        onCheckedChange = { vm.toggleForceSoundInSilent(it) }
+                    )
                 }
             }
 
-            // ---- Tono del timbre ----
-            SectionCard(title = "Tono del timbre", icon = Icons.Filled.MusicNote) {
+            // ---- Lista de timbres ----
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Nfc, null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Mis timbres", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
                 Text(
-                    "Elegí cómo suena tu timbre. Tocá ▶ para escucharlo.",
+                    "${settings.doorbells.size}",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.height(4.dp))
-                Ringtones.all.forEach { tone ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        RadioButton(
-                            selected = settings.ringtone == tone.id,
-                            onClick = { vm.setRingtone(tone.id) }
-                        )
-                        Text(tone.label, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { preview(tone.res) }) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = "Escuchar")
+            }
+            Text(
+                "Programá un NFC por lugar (casa, trabajo, auto…). Cada uno con " +
+                    "su nombre y su tono. Al tocarlo, te avisa que alguien llegó ahí.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (settings.doorbells.isEmpty()) {
+                Text(
+                    "No hay ningún timbre todavía.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            settings.doorbells.forEach { d ->
+                DoorbellCard(
+                    doorbell = d,
+                    expanded = expanded[d.id] == true,
+                    onToggleExpanded = { expanded[d.id] = !(expanded[d.id] ?: false) },
+                    onEnable = { vm.setDoorbellEnabled(d.id, it) },
+                    onRename = { vm.setDoorbellName(d.id, it) },
+                    onSelectRingtone = { vm.setDoorbellRingtone(d.id, it) },
+                    onPreview = { preview(it) },
+                    onWriteNfc = { onStartWrite(vm.tagUrl(d)) },
+                    onShare = { shareText(context, vm.tagUrl(d)) },
+                    onTest = { vm.testRing(d.id) },
+                    onRegenerate = { vm.regenerateTopic(d.id) },
+                    onDelete = { deleteCandidate = d }
+                )
+            }
+
+            Button(
+                onClick = { showAdd = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.AddCircle, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Agregar un timbre")
+            }
+
+            // ---- Recibir en otro teléfono (iPhone / sin la app) ----
+            SectionCard(title = "Recibir en iPhone u otro teléfono", icon = Icons.Filled.PhoneIphone) {
+                Text(
+                    "¿Querés que los avisos también lleguen a un iPhone? Compartí este " +
+                        "enlace: te muestra cómo recibirlo con la app gratuita ntfy y " +
+                        "cómo configurar el sonido como timbre.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (settings.doorbells.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    settings.doorbells.forEach { d ->
+                        OutlinedButton(
+                            onClick = { shareText(context, vm.recibirUrl(d)) },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Filled.Share, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Compartir receptor de «${d.name}»", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
             }
 
-            // ---- Recibir en otro teléfono (iPhone / sin la app) ----
-            SectionCard(title = "Recibir en otro teléfono", icon = Icons.Filled.PhoneIphone) {
+            // ---- Que otros creen el suyo ----
+            SectionCard(title = "Invitar a crear un timbre (iPhone)", icon = Icons.Filled.AddCircle) {
                 Text(
-                    "¿Querés recibir el timbre en un iPhone u otro teléfono sin instalar " +
-                        "Upe timbre? Compartí este enlace: explica cómo recibirlo con la app " +
-                        "gratuita ntfy (incluye un QR).",
+                    "¿Querés que otra persona arme su propio timbre, incluso desde iPhone, " +
+                        "sin instalar nada? Compartí esta página: genera uno o varios timbres " +
+                        "en el navegador y hasta graba la etiqueta NFC.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(12.dp))
-                val recibir = vm.recibirUrl(settings)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { shareText(context, recibir) },
-                        modifier = Modifier.weight(1f)
-                    ) {
+                    Button(onClick = { shareText(context, vm.crearUrl()) }, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Filled.Share, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Compartir")
                     }
-                    OutlinedButton(
-                        onClick = { openUrl(context, recibir) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Filled.QrCode2, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Ver / QR")
-                    }
-                }
-            }
-
-            // ---- Que otros creen su propio timbre ----
-            SectionCard(title = "Invitar a crear un timbre", icon = Icons.Filled.AddCircle) {
-                Text(
-                    "¿Querés que otra persona arme su PROPIO timbre (sin depender de vos, " +
-                        "incluso desde iPhone)? Compartile esta página: genera su timbre, " +
-                        "configura el recibir y hasta graba la etiqueta.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
-                val crear = vm.crearUrl()
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { shareText(context, crear) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Filled.Share, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Compartir")
-                    }
-                    OutlinedButton(
-                        onClick = { openUrl(context, crear) },
-                        modifier = Modifier.weight(1f)
-                    ) {
+                    OutlinedButton(onClick = { openUrl(context, vm.crearUrl()) }, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Abrir")
@@ -266,64 +275,11 @@ fun MainScreen(
                 }
             }
 
-            // ---- Actualizaciones ----
-            // Solo en el build sideload: Google Play prohíbe que la app se
-            // actualice sola, así que en el flavor "play" se oculta esta sección.
-            if (!BuildConfig.PLAY_BUILD)
-            SectionCard(title = "Actualizaciones", icon = Icons.Filled.SystemUpdate) {
+            // ---- Fiabilidad ----
+            SectionCard(title = "Que no se pierda ningún aviso", icon = Icons.Filled.BatteryAlert) {
                 Text(
-                    "Versión instalada: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                    fontSize = 13.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                when (val st = updateState) {
-                    is UpdateState.Checking -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                    is UpdateState.Downloading -> {
-                        Text("Descargando… ${st.progress}%", fontSize = 13.sp)
-                        LinearProgressIndicator(
-                            progress = { st.progress / 100f },
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-                        )
-                    }
-                    is UpdateState.UpToDate ->
-                        Text("Ya tenés la última versión ✅", color = MaterialTheme.colorScheme.primary)
-                    is UpdateState.Error ->
-                        Text("Error: ${st.message}", color = MaterialTheme.colorScheme.error)
-                    is UpdateState.Available -> {
-                        Text(
-                            "Nueva versión disponible: ${st.info.versionName}",
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (st.info.notes.isNotBlank()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(st.info.notes, fontSize = 13.sp)
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                if (!app.toctoc.timbre.update.Updater.canInstall(context)) {
-                                    activity.openInstallUnknownAppsSettings()
-                                }
-                                vm.downloadUpdate(st.info)
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Descargar e instalar") }
-                    }
-                    is UpdateState.ReadyToInstall ->
-                        Text("Abriendo el instalador…")
-                    UpdateState.Idle -> {}
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { vm.checkUpdate() },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Buscar actualización") }
-            }
-
-            // ---- Fiabilidad / batería ----
-            SectionCard(title = "Que no se pierda ningún timbre", icon = Icons.Filled.BatteryAlert) {
-                Text(
-                    "Para que el timbre suene siempre, desactivá la optimización de batería para Upe timbre.",
+                    "Para que el timbre suene siempre, desactivá la optimización de batería " +
+                        "para Upe timbre.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -335,7 +291,7 @@ fun MainScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "En Android 14+ activá también «Notificaciones a pantalla completa» " +
-                        "para que el timbre despierte la pantalla.",
+                        "para que el aviso despierte la pantalla.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -345,41 +301,88 @@ fun MainScreen(
                 ) { Text("Permiso pantalla completa") }
             }
 
-            // ---- Avanzado ----
-            var showAdvanced by remember { mutableStateOf(false) }
-            TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                Text(if (showAdvanced) "Ocultar opciones avanzadas" else "Opciones avanzadas")
-            }
-            if (showAdvanced) {
-                SectionCard(title = "Servidor y topic", icon = Icons.Filled.Settings) {
-                    SelectionRow(label = "Topic", value = settings.topic)
-                    Spacer(Modifier.height(12.dp))
-                    var server by remember(settings.ntfyServer) { mutableStateOf(settings.ntfyServer) }
-                    OutlinedTextField(
-                        value = server,
-                        onValueChange = { server = it },
-                        label = { Text("Servidor ntfy") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { vm.setServer(server) }) { Text("Guardar servidor") }
-                        OutlinedButton(onClick = { vm.regenerateTopic() }) { Text("Regenerar topic") }
-                    }
-                    Spacer(Modifier.height(4.dp))
+            // ---- Actualizaciones (solo sideload) ----
+            if (!BuildConfig.PLAY_BUILD)
+                SectionCard(title = "Actualizaciones", icon = Icons.Filled.SystemUpdate) {
                     Text(
-                        "Podés autohospedar ntfy y poner tu propia URL. Si cambiás el " +
-                            "servidor o el topic, volvé a grabar la etiqueta.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "Versión instalada: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                        fontSize = 13.sp
                     )
+                    Spacer(Modifier.height(12.dp))
+                    when (val st = updateState) {
+                        is UpdateState.Checking -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                        is UpdateState.Downloading -> {
+                            Text("Descargando… ${st.progress}%", fontSize = 13.sp)
+                            LinearProgressIndicator(
+                                progress = { st.progress / 100f },
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                            )
+                        }
+                        is UpdateState.UpToDate ->
+                            Text("Ya tenés la última versión ✅", color = MaterialTheme.colorScheme.primary)
+                        is UpdateState.Error ->
+                            Text("Error: ${st.message}", color = MaterialTheme.colorScheme.error)
+                        is UpdateState.Available -> {
+                            Text("Nueva versión: ${st.info.versionName}", fontWeight = FontWeight.Bold)
+                            if (st.info.notes.isNotBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(st.info.notes, fontSize = 13.sp)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    if (!app.toctoc.timbre.update.Updater.canInstall(context)) {
+                                        activity.openInstallUnknownAppsSettings()
+                                    }
+                                    vm.downloadUpdate(st.info)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Descargar e instalar") }
+                        }
+                        is UpdateState.ReadyToInstall -> Text("Abriendo el instalador…")
+                        UpdateState.Idle -> {}
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { vm.checkUpdate() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Buscar actualización") }
                 }
-            }
 
             Spacer(Modifier.height(8.dp))
         }
+    }
+
+    // ---- Diálogo de alta ----
+    if (showAdd) {
+        AddDoorbellDialog(
+            onConfirm = { name ->
+                vm.addDoorbell(name)
+                showAdd = false
+            },
+            onDismiss = { showAdd = false }
+        )
+    }
+
+    // ---- Diálogo de borrado ----
+    deleteCandidate?.let { d ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            icon = { Icon(Icons.Filled.DeleteForever, null, Modifier.size(32.dp)) },
+            title = { Text("Eliminar «${d.name}»") },
+            text = {
+                Text(
+                    "La etiqueta NFC grabada con este timbre va a dejar de funcionar. " +
+                        "¿Querés continuar?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteDoorbell(d.id); deleteCandidate = null }) {
+                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text("Cancelar") } }
+        )
     }
 
     // ---- Diálogo de grabación NFC ----
@@ -410,9 +413,185 @@ fun MainScreen(
 }
 
 @Composable
+private fun DoorbellCard(
+    doorbell: Doorbell,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onEnable: (Boolean) -> Unit,
+    onRename: (String) -> Unit,
+    onSelectRingtone: (String) -> Unit,
+    onPreview: (Int) -> Unit,
+    onWriteNfc: () -> Unit,
+    onShare: () -> Unit,
+    onTest: () -> Unit,
+    onRegenerate: () -> Unit,
+    onDelete: () -> Unit
+) {
+    ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (doorbell.enabled) Icons.Filled.NotificationsActive
+                    else Icons.Filled.NotificationsPaused,
+                    contentDescription = null,
+                    tint = if (doorbell.enabled) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        doorbell.name,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AssistChip(
+                            onClick = { onEnable(!doorbell.enabled) },
+                            label = {
+                                Text(
+                                    if (doorbell.enabled) "Activo" else "Pausado",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier.height(26.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "· ${Ringtones.labelFor(doorbell.ringtone)}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                IconButton(onClick = onToggleExpanded) {
+                    Icon(
+                        if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (expanded) "Ocultar" else "Mostrar"
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column {
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+                    var name by remember(doorbell.name) { mutableStateOf(doorbell.name) }
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Nombre") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row {
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { if (name != doorbell.name) onRename(name) }) {
+                            Text("Guardar nombre")
+                        }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    Text("Tono", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Ringtones.all.forEach { tone ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            RadioButton(
+                                selected = doorbell.ringtone == tone.id,
+                                onClick = { onSelectRingtone(tone.id) }
+                            )
+                            Text(tone.label, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { onPreview(tone.res) }) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = "Escuchar")
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onWriteNfc, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.Edit, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Grabar NFC")
+                        }
+                        OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.Share, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Compartir")
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = onTest, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Probar sonido")
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onRegenerate, modifier = Modifier.weight(1f)) {
+                            Text("Regenerar código", fontSize = 12.sp)
+                        }
+                        TextButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Eliminar",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddDoorbellDialog(
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.AddCircle, null, Modifier.size(32.dp)) },
+        title = { Text("Nuevo timbre") },
+        text = {
+            Column {
+                Text(
+                    "Ponele un nombre al lugar que querés avisar " +
+                        "(ej: Casa, Trabajo, Auto, Depto 4B).",
+                    fontSize = 13.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nombre") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(name.trim()) }) { Text("Crear") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
 private fun SectionCard(
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     content: @Composable ColumnScope.() -> Unit
 ) {
     ElevatedCard(shape = RoundedCornerShape(20.dp)) {
@@ -428,31 +607,6 @@ private fun SectionCard(
     }
 }
 
-@Composable
-private fun SelectionRow(label: String, value: String) {
-    val context = LocalContext.current
-    Column {
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                value,
-                fontSize = 13.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(onClick = { copyToClipboard(context, label, value) }) {
-                Icon(Icons.Filled.ContentCopy, contentDescription = "Copiar", Modifier.size(18.dp))
-            }
-        }
-    }
-}
-
-private fun copyToClipboard(context: Context, label: String, value: String) {
-    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText(label, value))
-}
-
 private fun shareText(context: Context, text: String) {
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
@@ -465,4 +619,10 @@ private fun openUrl(context: Context, url: String) {
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
     } catch (_: Exception) {}
+}
+
+@Suppress("unused")
+private fun copyToClipboard(context: Context, label: String, value: String) {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    cm.setPrimaryClip(ClipData.newPlainText(label, value))
 }

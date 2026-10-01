@@ -31,9 +31,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 
 /**
- * Pantalla nativa que se abre cuando el VISITANTE toca la etiqueta y tiene la
- * app instalada (vía deep link toctoc://ring?t=..&s=..&n=..). Publica el timbre
- * en ntfy sin tocar la configuración del dueño: es totalmente sin estado.
+ * Pantalla nativa del VISITANTE: se abre cuando toca la etiqueta NFC con la
+ * app instalada. Avisa al dueño vía Relay (FCM) + ntfy (back-up) sin tocar
+ * la configuración local. Totalmente sin estado.
  */
 class SendRingActivity : ComponentActivity() {
 
@@ -44,28 +44,22 @@ class SendRingActivity : ComponentActivity() {
         val topic = data?.getQueryParameter("t").orEmpty()
         val server = data?.getQueryParameter("s")?.takeIf { it.isNotBlank() }
             ?: BuildConfig.DEFAULT_NTFY_SERVER
-        val name = data?.getQueryParameter("n")?.takeIf { it.isNotBlank() } ?: "la casa"
+        val place = data?.getQueryParameter("n")?.takeIf { it.isNotBlank() } ?: "el lugar"
 
         setContent {
             TocTocTheme {
                 SendRingScreen(
                     topic = topic,
-                    doorbellName = name,
+                    placeName = place,
                     onRing = { onDone ->
                         lifecycleScope.launch {
-                            // Disparamos AMBAS vías en paralelo (igual que la web):
-                            //  - Relay/FCM: llega con la app cerrada / teléfono dormido.
-                            //  - ntfy: back-up para versiones sideload que aún escuchan
-                            //    por servicio en primer plano.
-                            val msg = "Alguien está tocando el timbre de $name"
+                            val msg = "Alguien llegó a $place"
                             val results = listOf(
-                                async { Relay.ring(topic, name) },
-                                async { Ntfy.publish(server, topic, msg, name) }
+                                async { Relay.ring(topic, place) },
+                                async { Ntfy.publish(server, topic, msg, place) }
                             ).awaitAll()
                             val relayOk = results[0].isSuccess
                             val ntfyOk = results[1].isSuccess
-                            // Enviamos el detalle al UI para poder diagnosticar
-                            // por qué el timbre no suena en algún teléfono viejo.
                             val detail = buildString {
                                 append(if (relayOk) "FCM ✓" else "FCM ✗: ${results[0].exceptionOrNull()?.message ?: "?"}")
                                 append(" | ")
@@ -85,7 +79,7 @@ private enum class RingUi { Idle, Sending, Ok, Error, Invalid }
 @Composable
 private fun SendRingScreen(
     topic: String,
-    doorbellName: String,
+    placeName: String,
     onRing: ((Boolean, String) -> Unit) -> Unit
 ) {
     var state by remember {
@@ -102,7 +96,6 @@ private fun SendRingScreen(
         }
     }
 
-    // Toca automáticamente al abrir desde la etiqueta
     LaunchedEffect(Unit) { if (state == RingUi.Idle) ring() }
 
     val infinite = rememberInfiniteTransition(label = "bell")
@@ -127,29 +120,27 @@ private fun SendRingScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "🔔",
-                    fontSize = 92.sp,
+                    "📍",
+                    fontSize = 86.sp,
                     modifier = if (state == RingUi.Sending) Modifier.rotate(swing) else Modifier
                 )
             }
             Spacer(Modifier.height(28.dp))
             Text(
-                "Tocar el timbre",
+                "Avisá que llegaste",
                 color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(8.dp))
             Text(
                 when (state) {
                     RingUi.Invalid -> "Enlace inválido: falta el identificador del timbre."
-                    RingUi.Ok -> "✅ ¡Listo! Ya avisamos que estás en la puerta."
+                    RingUi.Ok -> "✅ ¡Listo! Avisamos a $placeName que llegaste."
                     RingUi.Error -> "❌ No se pudo avisar. Revisá tu conexión."
-                    RingUi.Sending -> "Tocando…"
-                    RingUi.Idle -> "Avisar a $doorbellName que estás en la puerta."
+                    RingUi.Sending -> "Avisando a $placeName…"
+                    RingUi.Idle -> "Avisar a $placeName que llegaste."
                 },
                 color = Color(0xE6FFFFFF), fontSize = 16.sp, textAlign = TextAlign.Center
             )
-            // Diagnóstico: cuál canal entregó / falló. Ayuda a explicar por qué
-            // un teléfono viejo abre esta pantalla pero el dueño no recibe.
             if ((state == RingUi.Ok || state == RingUi.Error) && lastDetail.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -172,14 +163,14 @@ private fun SendRingScreen(
                     modifier = Modifier.fillMaxWidth().height(64.dp)
                 ) {
                     Text(
-                        if (state == RingUi.Ok) "Tocar de nuevo" else "🔔 Tocar timbre",
+                        if (state == RingUi.Ok) "Avisar de nuevo" else "📍 Avisar que llegué",
                         fontSize = 20.sp, fontWeight = FontWeight.Bold
                     )
                 }
             }
             Spacer(Modifier.height(28.dp))
             Text(
-                "Enviado con Upe timbre · timbre NFC",
+                "Enviado con Upe timbre · aviso de llegada por NFC",
                 color = Color(0x99FFFFFF), fontSize = 12.sp
             )
         }

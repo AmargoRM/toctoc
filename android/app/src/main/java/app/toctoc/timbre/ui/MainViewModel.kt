@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.toctoc.timbre.BuildConfig
+import app.toctoc.timbre.data.Doorbell
 import app.toctoc.timbre.data.Links
 import app.toctoc.timbre.data.Ntfy
 import app.toctoc.timbre.data.Relay
@@ -30,85 +31,129 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         TocTocSettings(
-            topic = "",
-            doorbellName = "Mi puerta",
+            doorbells = emptyList(),
             ntfyServer = "https://ntfy.sh",
             listening = false,
-            ringtone = Ringtones.DEFAULT_ID
+            forceSoundInSilent = false
         )
     )
 
     val updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val toast = MutableStateFlow<String?>(null)
+    /** El id del timbre recién creado para que la UI lo expanda automáticamente. */
+    val focusDoorbellId = MutableStateFlow<String?>(null)
 
     init {
         viewModelScope.launch {
-            repo.ensureTopic()
-            // Si el timbre ya estaba activo, aseguramos la suscripción FCM
-            // (tras reinstalar/actualizar el token cambia y hay que re-suscribir).
+            repo.ensureAtLeastOne()
+            // Si las alertas ya estaban activas, resuscribir a FCM. Al re-instalar
+            // o actualizar la app el token cambia y hay que re-suscribirse.
             val s = repo.flow.first()
-            if (s.listening && s.topic.isNotBlank()) subscribeFcm(s.topic, true)
+            if (s.listening) syncSubscriptions(desired = s.activeTopics)
         }
     }
 
-    private fun subscribeFcm(topic: String, on: Boolean) {
-        try {
-            val fm = FirebaseMessaging.getInstance()
-            if (on) fm.subscribeToTopic(topic) else fm.unsubscribeFromTopic(topic)
-        } catch (_: Exception) {}
+    // ---- FCM topic sync ----
+    private fun subscribe(topic: String) {
+        try { FirebaseMessaging.getInstance().subscribeToTopic(topic) } catch (_: Exception) {}
+    }
+    private fun unsubscribe(topic: String) {
+        try { FirebaseMessaging.getInstance().unsubscribeFromTopic(topic) } catch (_: Exception) {}
+    }
+    private fun syncSubscriptions(desired: List<String>) {
+        // No tracking local: FCM es idempotente. Suscribimos lo deseado (todos los
+        // enabled) y nos desuscribimos solo lo que explícitamente deja de estar
+        // vía deleteDoorbell/regenerateTopic/setEnabled(false).
+        desired.forEach { subscribe(it) }
     }
 
-    fun tagUrl(s: TocTocSettings): String =
-        Links.tagUrl(s.ntfyServer, s.topic, s.doorbellName)
-
-    fun recibirUrl(s: TocTocSettings): String =
-        Links.recibirUrl(s.ntfyServer, s.topic, s.doorbellName)
-
+    // ---- Links ----
+    fun tagUrl(d: Doorbell): String =
+        Links.tagUrl(settings.value.ntfyServer, d.topic, d.name)
+    fun recibirUrl(d: Doorbell): String =
+        Links.recibirUrl(settings.value.ntfyServer, d.topic, d.name)
     fun crearUrl(): String = Links.crearPageUrl()
 
-    fun setRingtone(id: String) = viewModelScope.launch { repo.setRingtone(id) }
+    // ---- Toggles globales ----
+    fun toggleListening(on: Boolean) = viewModelScope.launch {
+        repo.setListening(on)
+        val s = settings.value
+        if (on) {
+            s.activeTopics.forEach { subscribe(it) }
+        } else {
+            s.doorbells.forEach { unsubscribe(it.topic) }
+        }
+        if (!BuildConfig.PLAY_BUILD) {
+            val ctx = getApplication<Application>()
+            if (on && s.doorbells.any { it.enabled }) RingListenerService.start(ctx)
+            else RingListenerService.stop(ctx)
+        }
+    }
 
-    fun setName(name: String) = viewModelScope.launch { repo.setName(name) }
+    fun toggleForceSoundInSilent(on: Boolean) = viewModelScope.launch {
+        repo.setForceSoundInSilent(on)
+    }
 
     fun setServer(server: String) = viewModelScope.launch { repo.setServer(server) }
 
-    fun regenerateTopic() = viewModelScope.launch {
-        val old = settings.value.topic
-        val new = repo.regenerateTopic()
+    // ---- Operaciones por timbre ----
+    fun addDoorbell(name: String) = viewModelScope.launch {
+        val d = repo.addDoorbell(name)
+        if (settings.value.listening && d.enabled) subscribe(d.topic)
+        focusDoorbellId.value = d.id
+        toast.value = "Timbre «${d.name}» creado."
+    }
+
+    fun deleteDoorbell(id: String) = viewModelScope.launch {
+        val d = settings.value.byId(id) ?: return@launch
+        unsubscribe(d.topic)
+        repo.deleteDoorbell(id)
+        toast.value = "Timbre «${d.name}» eliminado."
+    }
+
+    fun setDoorbellName(id: String, name: String) =
+        viewModelScope.launch { repo.setDoorbellName(id, name) }
+
+    fun setDoorbellRingtone(id: String, toneId: String) =
+        viewModelScope.launch { repo.setDoorbellRingtone(id, toneId) }
+
+    fun setDoorbellEnabled(id: String, enabled: Boolean) = viewModelScope.launch {
+        val d = settings.value.byId(id) ?: return@launch
+        repo.setDoorbellEnabled(id, enabled)
         if (settings.value.listening) {
-            if (old.isNotBlank()) subscribeFcm(old, false)
-            subscribeFcm(new, true)
-        }
-        toast.value = "Se generó un topic nuevo. Volvé a grabar tu etiqueta NFC."
-    }
-
-    fun toggleListening(on: Boolean) = viewModelScope.launch {
-        val topic = repo.ensureTopic()
-        repo.setListening(on)
-        subscribeFcm(topic, on)
-        // En el build de Play la entrega es 100% FCM: no hay servicio de escucha.
-        if (!BuildConfig.PLAY_BUILD) {
-            val ctx = getApplication<Application>()
-            if (on) RingListenerService.start(ctx) else RingListenerService.stop(ctx)
+            if (enabled) subscribe(d.topic) else unsubscribe(d.topic)
         }
     }
 
-    fun testRing() = viewModelScope.launch {
+    fun regenerateTopic(id: String) = viewModelScope.launch {
+        val old = settings.value.byId(id) ?: return@launch
+        unsubscribe(old.topic)
+        val new = repo.regenerateTopic(id) ?: return@launch
+        if (settings.value.listening && old.enabled) subscribe(new)
+        toast.value = "Nuevo código. Volvé a grabar la etiqueta NFC."
+    }
+
+    fun clearFocus() { focusDoorbellId.value = null }
+
+    fun testRing(id: String) = viewModelScope.launch {
+        val d = settings.value.byId(id) ?: return@launch
         val s = settings.value
-        // Igual que el visitante y la web: dispara ambas vías. En Play la única
-        // que sirve es Relay/FCM, pero mostramos el resultado de cada una para
-        // poder diagnosticar por qué el timbre no suena.
-        val relayR = Relay.ring(s.topic, s.doorbellName)
-        val ntfyR = Ntfy.publish(s.ntfyServer, s.topic, "Prueba de timbre 🔔", s.doorbellName)
+        val relayR = Relay.ring(d.topic, d.name)
+        val ntfyR = Ntfy.publish(s.ntfyServer, d.topic, "Prueba del timbre «${d.name}» 🔔", d.name)
         val relayOk = relayR.isSuccess
         val ntfyOk = ntfyR.isSuccess
         toast.value = when {
-            relayOk -> "Enviado por FCM. Si no suena en unos segundos, revisá permisos de notificación y batería."
-            ntfyOk -> "Solo llegó por ntfy (no llega en Play). Relay caído: ${relayR.exceptionOrNull()?.message}"
+            relayOk -> "Enviado por FCM. Si no suena, revisá permisos y batería."
+            ntfyOk -> "Solo llegó por ntfy. Relay caído: ${relayR.exceptionOrNull()?.message}"
             else -> "Falló todo. Relay: ${relayR.exceptionOrNull()?.message}. ntfy: ${ntfyR.exceptionOrNull()?.message}"
         }
     }
 
+    fun ringtoneLabel(id: String): String = Ringtones.labelFor(id)
+
+    fun clearToast() { toast.value = null }
+
+    // ---- Updater (solo sideload) ----
     fun checkUpdate() = viewModelScope.launch {
         updateState.value = UpdateState.Checking
         val r = Updater.check()
@@ -132,6 +177,4 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             onFailure = { updateState.value = UpdateState.Error(it.message ?: "Error al descargar") }
         )
     }
-
-    fun clearToast() { toast.value = null }
 }
